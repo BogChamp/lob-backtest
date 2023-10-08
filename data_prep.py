@@ -96,7 +96,7 @@ if __name__ == "__main__":
     trades_prepared, diffs_prepared = prepare_trades_diffs(order_book, new_diffs, trades_by_diff)
     
     trades_prepared = pd.DataFrame(trades_prepared, columns=['timestamp', 'price', 'amount', 'side'])
-    trades_prepared.to_csv('trades_prepared.csv')
+    trades_prepared.to_csv('trades_prepared.csv', index=False)
 
     with open("diffs_prepared.json", "w") as fp:
         json.dump(diffs_prepared , fp)
