@@ -11,46 +11,11 @@ SELL: int = 1
 MARKET_ID: int = 0
 MM_ID: int = 1
 
-class MatchingEngine:
-    def __init__(self):
-        pass 
-    
-    @staticmethod
-    def match_orders(price_levels: Sequence[PriceLevel], amount: float):
-        remain_amount = amount
-        price: float = 0.0
-        remain_orders = []
-        matches_info = defaultdict(list) # trader_info - [amount, price]
-
-        for i, price_level in enumerate(price_levels):
-            this_price: float = price_level.price
-            this_amount: float = price_level.amount
-            price += this_price * min(remain_amount, this_amount)
-            remain_amount, this_match_info = price_level.execute_limit_order(remain_amount)
-
-            for k, v in this_match_info.items():
-                trader_info = matches_info[k]
-                if len(trader_info):
-                    trader_info[0] += v
-                    trader_info[1] += v * this_price
-                else:
-                    trader_info = [v, v * this_price]
-                matches_info[k] = trader_info
-
-            if not remain_amount:
-                if price_level.amount:
-                    remain_orders += [price_level]
-                remain_orders += price_levels[i+1:]
-                break
-
-        return matches_info, remain_orders, remain_amount
 
 class OrderBookBase:
-    def __init__(self, bids: Sequence[PriceLevel] = [], asks: Sequence[PriceLevel] = [], 
-                 matching_engine: MatchingEngine = MatchingEngine()):
+    def __init__(self, bids: Sequence[PriceLevel] = [], asks: Sequence[PriceLevel] = []):
         self.bids = sorted(bids, reverse=True, key=lambda x: x.price)
         self.asks = sorted(asks, key=lambda x: x.price)
-        self.matching_engine = matching_engine
     
     def __repr__(self):
         ob_repr = ''
@@ -96,86 +61,62 @@ class OrderBookBase:
     def market_depth(self):
         return self.asks[-1].price - self.bids[-1].price
     
-    def set_ask_order(self, limit_order: LimitOrder):
-        index = len(self.bids)
-        for i, price_level in enumerate(self.bids):
-            if price_level.price < limit_order.price:
-                index = i
+    @staticmethod
+    def matching_engine(price_levels: Sequence[PriceLevel], 
+                        limit_order: LimitOrder):
+        matches_info = defaultdict(list)
+        remain_amount = limit_order.amount
+        sign = 2 * limit_order.side - 1
+
+        for i, price_level in enumerate(price_levels):
+            if (sign * price_level.price < sign * limit_order.price) or (remain_amount == 0):
                 break
+            this_price = price_level.price
+            remain_amount, cur_match_info = price_level.execute_limit_order(remain_amount)
+            for k, v in cur_match_info.items():
+                trader_info = matches_info[k]
+                if len(trader_info):
+                    trader_info[0] += v
+                    trader_info[1] += v * this_price
+                else:
+                    trader_info = [v, v * this_price]
+                matches_info[k] = trader_info
 
-        eligible_bids = self.bids[:index]
-        ineligible_bids = self.bids[index:]
+        return matches_info, remain_amount, i
 
-        matches_info, remain_bids, remain_amount = self.matching_engine.match_orders(eligible_bids, limit_order.amount)
-        new_bids: Sequence[PriceLevel] = remain_bids + ineligible_bids
-        new_asks: Sequence[PriceLevel] = self.asks
-
-        if remain_amount > 0:
-            new_limit_order = LimitOrder(limit_order.price, remain_amount, 
-                                         limit_order.side, limit_order.trader_id)
-
-            index = len(new_asks)
-            for i, price_level in enumerate(new_asks):
-                if price_level.price >= limit_order.price:
-                    index = i
-                    break
-
-            if index == len(new_asks):
-                new_asks.append(PriceLevel(new_limit_order))
-            elif new_asks[index].price != limit_order.price:
-                new_asks.insert(index, PriceLevel(new_limit_order))
-            else:
-                new_asks[index].add_limit_order(new_limit_order)
-        
-        self.bids = new_bids
-        self.asks = new_asks
-
-        return matches_info
-
-    def set_bid_order(self, limit_order: LimitOrder):
-        index = len(self.asks)
-        for i, price_level in enumerate(self.asks):
-            if price_level.price > limit_order.price:
-                index = i
-                break
- 
-        eligible_asks = self.asks[:index]
-        ineligible_asks = self.asks[index:]
-
-        matches_info, remain_asks, remain_amount = self.matching_engine.match_orders(eligible_asks, limit_order.amount)
-        new_asks: Sequence[PriceLevel] = remain_asks + ineligible_asks
-        new_bids: Sequence[PriceLevel] = self.bids
-
-        if remain_amount > 0:
-            new_limit_order = LimitOrder(limit_order.price, remain_amount, 
-                                         limit_order.side, limit_order.trader_id)
-
-            index = len(new_bids)
-            for i, price_level in enumerate(new_bids):
-                if price_level.price <= limit_order.price:
-                    index = i
-                    break
-            
-            if index == len(new_bids):
-                new_bids.append(PriceLevel(new_limit_order))
-            elif new_bids[index].price != limit_order.price:
-                new_bids.insert(index, PriceLevel(new_limit_order))
-            else:
-                new_bids[index].add_limit_order(new_limit_order)
-        
-        self.bids = new_bids
-        self.asks = new_asks
-
-        return matches_info
-
-    def set_order(self, limit_order: LimitOrder):
-        if limit_order.side == SELL:
-            matches_info = self.set_ask_order(limit_order)
-        elif limit_order.side == BUY:
-            matches_info = self.set_bid_order(limit_order)
+    def set_limit_order(self, limit_order: LimitOrder):
+        sign = 2 * limit_order.side - 1
+        if sign == -1:
+            price_levels = self.bids
+            opposite_price_levels = self.asks
+        elif sign == 1:
+            price_levels = self.asks
+            opposite_price_levels = self.bids
         else:
-            raise Exception("WRONG SIDE!")
-        
+            raise Exception('WRONG SIDE')
+
+        old_amount = limit_order.amount
+        matches_info, remain_amount, p_l_eaten = self.matching_engine(opposite_price_levels, limit_order)
+
+        if sign == -1:
+            self.asks = self.asks[p_l_eaten:]
+        else:
+            self.bids = self.bids[p_l_eaten:]
+
+        if remain_amount > 0:
+            if remain_amount != old_amount:
+                new_limit_order = LimitOrder(limit_order.price, remain_amount, 
+                                          limit_order.side, limit_order.trader_id)
+                price_levels.insert(0, PriceLevel(new_limit_order))
+            else:
+                index = bisect_left(price_levels, sign * limit_order.price, key=lambda x: sign * x.price)
+                if index == len(price_levels):
+                    price_levels.append(PriceLevel(limit_order))
+                elif price_levels[index].price == limit_order.price:
+                    price_levels[index].add_limit_order(limit_order)
+                else:
+                    price_levels.insert(index, PriceLevel(limit_order))
+
         return matches_info
 
     @staticmethod
@@ -194,6 +135,7 @@ class OrderBookBase:
             asks.append(ask)
         
         return OrderBookBase(bids, asks)
+
 
 class OrderBookPrep(OrderBookBase):
     def track_diff_side(self, update, side: int):
@@ -251,3 +193,51 @@ class OrderBookPrep(OrderBookBase):
             asks.append(ask)
         
         return OrderBookPrep(bids, asks)
+
+
+class OrderBook(OrderBookBase):
+    def update_limit_orders(self, updates, side):
+        sign = 2 * side - 1
+        if side == BUY:
+            price_levels = self.bids
+        elif side == SELL:
+            price_levels = self.asks
+        else:
+            raise Exception("Wrong side!")
+        
+        for update in updates: # THINK ABOUT ORDER OF PRICE CHANGES
+            index = bisect_left(price_levels, sign*update[0], key=lambda x: sign*x.price)
+            if index == len(price_levels):
+                if update[1] > 0:
+                    self.set_limit_order(LimitOrder(update[0], update[1], side, MARKET_ID))
+            elif price_levels[index].price == update[0]:
+                price_levels[index].change_liquidity(update[1], MARKET_ID)
+                if price_levels[index].amount == 0:
+                    del price_levels[index]
+            else:
+                if update[1] > 0:
+                    self.set_limit_order(LimitOrder(update[0], update[1], BUY, MARKET_ID))
+            
+    def apply_historical_update(self, updates):
+        bids_update = updates[1]
+        asks_update = updates[2]
+
+        self.update_limit_orders(bids_update, BUY)
+        self.update_limit_orders(asks_update, SELL)
+
+    @staticmethod
+    def create_lob_init(lob_state: dict):
+        bids_raw = lob_state['bids']
+        asks_raw = lob_state['asks']
+
+        bids = []
+        asks = []
+        for bid_raw in bids_raw:
+            bid = PriceLevel(LimitOrder(bid_raw[0], bid_raw[1], BUY, MARKET_ID))
+            bids.append(bid)
+        
+        for ask_raw in asks_raw:
+            ask = PriceLevel(LimitOrder(ask_raw[0], ask_raw[1], SELL, MARKET_ID))
+            asks.append(ask)
+        
+        return OrderBook(bids, asks)
