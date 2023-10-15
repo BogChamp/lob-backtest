@@ -10,3 +10,8 @@ Files:
 3) stream_lobs.py - to read ob states from exchange
 4) get_lob.py - get 1 ob state
 5) backtest.py - run backtest
+
+# TODOS:
+1) Think about order of applying historical incremental order book updates
+2) Think about self trading(buy or self to self due to existence of your order on opposite side)
+3) Contain only top k levels of bids and asks. Reorganaize data for it
