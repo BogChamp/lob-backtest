@@ -10,7 +10,7 @@ LOB_API_URI = "https://api.binance.com/api/v3/depth?symbol=ETHUSDT&limit=1000"
 TRADES_SOCKET_URI = "wss://stream.binance.com:9443/ws/ethusdt@trade"
 
 
-async def socket(link, seconds=30):
+async def socket(link, seconds=1000):
     messages = []
     async with websockets.connect(link) as websocket:
         start_time = time.time()
