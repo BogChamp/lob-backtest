@@ -5,9 +5,17 @@ from ASmodel import AvellanedaStoikov
 from bisect import bisect_left
 from tqdm import tqdm
 
+
 class Simulator:
-    def __init__(self, diffs: Sequence[dict], trades: Sequence[dict], init_lob: dict,
-                 model: AvellanedaStoikov, pnl_counter: PnL_Counter, time_end: float):
+    def __init__(
+        self,
+        diffs: Sequence[dict],
+        trades: Sequence[dict],
+        init_lob: dict,
+        model: AvellanedaStoikov,
+        pnl_counter: PnL_Counter,
+        time_end: float,
+    ):
         self.diffs = diffs
         self.trades = trades
         self.init_lob = init_lob
@@ -26,11 +34,15 @@ class Simulator:
         for i, diff in enumerate(tqdm(self.diffs)):
             if diff[0] > self.time_end:
                 break
-            
+
             cur_trades = self.trades[i]
-            my_bid, my_ask = self.model.bid_ask_limit_orders(order_book, diff[0]+market_latency, q)
-            market_interaction = diff[0]+market_latency+local_latency
-            my_order_index = bisect_left(cur_trades, market_interaction, key=lambda x: x[0])
+            my_bid, my_ask = self.model.bid_ask_limit_orders(
+                order_book, diff[0] + market_latency, q
+            )
+            market_interaction = diff[0] + market_latency + local_latency
+            my_order_index = bisect_left(
+                cur_trades, market_interaction, key=lambda x: x[0]
+            )
             trades_before = cur_trades[:my_order_index]
             trades_after = cur_trades[my_order_index:]
 
@@ -41,7 +53,9 @@ class Simulator:
                 if len(my_match_info):
                     q += sign * my_match_info[0]
                     wealth += -sign * my_match_info[1]
-                    self.pnl_counter.change_pnl(last_trade_price, order_book.ask_price(), q)
+                    self.pnl_counter.change_pnl(
+                        last_trade_price, order_book.ask_price(), q
+                    )
                     last_trade_price = order_book.ask_price()
 
             for my_order in [my_bid, my_ask]:
@@ -52,7 +66,7 @@ class Simulator:
                     wealth += sign * v[1]
                 self.pnl_counter.change_pnl(last_trade_price, order_book.ask_price(), q)
                 last_trade_price = order_book.ask_price()
-            
+
             for ts, limit_order in trades_after:
                 match_info = order_book.set_limit_order(limit_order)
                 sign = 2 * limit_order.side - 1
@@ -61,14 +75,16 @@ class Simulator:
                     q += sign * my_match_info[0]
                     wealth += -sign * my_match_info[1]
                     last_trade_price = order_book.ask_price()
-                    self.pnl_counter.change_pnl(last_trade_price, order_book.ask_price(), q)
+                    self.pnl_counter.change_pnl(
+                        last_trade_price, order_book.ask_price(), q
+                    )
                     last_trade_price = order_book.ask_price()
 
             q = round(q, AMOUNT_TICK)
             wealth = round(wealth, PRICE_TICK)
             pnl_history.append(self.pnl_counter.pnl)
             order_book.apply_historical_update(diff)
-        
+
         self.pnl_counter.change_pnl(last_trade_price, order_book.ask_price(), q)
         pnl_history.append(self.pnl_counter.pnl)
 
