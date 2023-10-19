@@ -1,4 +1,0 @@
-numpy==1.26.1
-pandas==2.1.1
-tqdm==4.66.1
-websockets==11.0.3

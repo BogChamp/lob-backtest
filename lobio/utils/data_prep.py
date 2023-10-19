@@ -3,18 +3,18 @@ import numpy as np
 import pandas as pd
 from tqdm import tqdm
 
-from LimitOrder import LimitOrder
-from OrderBook import OrderBookPrep, BUY, SELL, MARKET_ID
+from lobio.lob.limit_order import LimitOrder
+from lobio.lob.order_book import OrderBookPrep, Side, TraderId
 
 
 def read_raw_data():
-    with open("diffs.json", "r", encoding="utf-8") as file_out:
+    with open("./data/diffs.json", "r", encoding="utf-8") as file_out:
         diffs = json.load(file_out)
 
-    with open("trades.json", "r", encoding="utf-8") as file_out:
+    with open("./data/trades.json", "r", encoding="utf-8") as file_out:
         trades = json.load(file_out)
 
-    with open("init_lob.json", "r", encoding="utf-8") as file_out:
+    with open("./data/init_lob.json", "r", encoding="utf-8") as file_out:
         init_lob = json.load(file_out)
 
     init_lob["bids"] = np.array(init_lob["bids"]).astype(float)
@@ -94,10 +94,12 @@ def prepare_trades_diffs(order_book, new_diffs, trades_by_diff):
         cur_trades = trades_by_diff[i]
         for trade in cur_trades:
             if trade[1] >= order_book.ask_price():
-                side = BUY
+                side = Side.BUY
             elif trade[1] <= order_book.bid_price():
-                side = SELL
-            order_book.set_order(LimitOrder(trade[1], trade[2], side, MARKET_ID))
+                side = Side.SELL
+            order_book.set_limit_order(
+                LimitOrder(trade[1], trade[2], side, TraderId.MARKET)
+            )
             trades_prepared.append([trade[0], trade[1], trade[2], side])
         diffs_prepared.append(order_book.track_diff(diff))
 
@@ -120,7 +122,7 @@ if __name__ == "__main__":
     trades_prepared = pd.DataFrame(
         trades_prepared, columns=["timestamp", "price", "amount", "side"]
     )
-    trades_prepared.to_csv("trades_prepared.csv", index=False)
+    trades_prepared.to_csv("./data/trades_prepared.csv", index=False)
 
-    with open("diffs_prepared.json", "w") as fp:
+    with open("./data/diffs_prepared.json", "w") as fp:
         json.dump(diffs_prepared, fp)

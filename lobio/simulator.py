@@ -1,7 +1,7 @@
 from typing import Sequence
-from PnLCounter import PnL_Counter
-from OrderBook import OrderBook, MM_ID, PRICE_TICK, AMOUNT_TICK
-from ASmodel import AvellanedaStoikov
+from .accounting.pnl_counter import PnL_Counter
+from .lob.order_book import OrderBook, TraderId, PRICE_TICK, AMOUNT_TICK
+from .model.avellaneda_stoikov_model import AvellanedaStoikov
 from bisect import bisect_left
 from tqdm import tqdm
 
@@ -49,7 +49,7 @@ class Simulator:
             for ts, limit_order in trades_before:
                 match_info = order_book.set_limit_order(limit_order)
                 sign = 2 * limit_order.side - 1
-                my_match_info = match_info[MM_ID]
+                my_match_info = match_info[TraderId.MM]
                 if len(my_match_info):
                     q += sign * my_match_info[0]
                     wealth += -sign * my_match_info[1]
@@ -70,7 +70,7 @@ class Simulator:
             for ts, limit_order in trades_after:
                 match_info = order_book.set_limit_order(limit_order)
                 sign = 2 * limit_order.side - 1
-                my_match_info = match_info[MM_ID]
+                my_match_info = match_info[TraderId.MM]
                 if len(my_match_info):
                     q += sign * my_match_info[0]
                     wealth += -sign * my_match_info[1]

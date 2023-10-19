@@ -1,4 +1,4 @@
-from LimitOrder import LimitOrder, AMOUNT_TICK
+from .limit_order import LimitOrder, AMOUNT_TICK
 from collections import defaultdict
 
 
