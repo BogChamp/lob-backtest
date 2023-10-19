@@ -82,7 +82,7 @@ def save_order_book(order_book):
         "asks": asks_prepared,
     }
 
-    with open("init_lob_prepared.json", "w") as fp:
+    with open("./data/init_lob_prepared.json", "w") as fp:
         json.dump(init_lob_prepared, fp)
 
 
