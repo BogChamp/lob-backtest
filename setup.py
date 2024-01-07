@@ -27,5 +27,5 @@ setup(
         "matplotlib==3.8.0",
         "websockets==11.0.3",
     ],
-    python_requires=">=3.9.16, <=3.11.4",
+    python_requires=">=3.11.0, <=3.12.0",
 )

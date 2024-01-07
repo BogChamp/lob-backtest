@@ -37,6 +37,7 @@ def separate_trades_by_diff(diffs, trades):
     trades_by_diff = []
 
     trades_index = 0
+    trades.append({"T":  np.inf}) # plug for case if all trades performed before last incremental diff
     for v in diffs[1:]:
         time_to = v["E"]
         trades_after_diff = []
