@@ -66,4 +66,4 @@ class AvellanedaStoikov:
         bid_order = LimitOrder(bid_price, self.q_max, Side.BUY, TraderId.MM)
         ask_order = LimitOrder(ask_price, self.q_max, Side.SELL, TraderId.MM)
 
-        return bid_order, ask_order
+        return [bid_order], [ask_order]

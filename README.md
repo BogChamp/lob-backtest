@@ -11,6 +11,10 @@ Files:
 4) get_lob.py - get 1 ob state
 5) backtest.py - run backtest
 
+# lob-backtest
+
+pip install -e .
+
 # TODOS:
 1) Think about order of applying historical incremental order book updates
 2) Think about self trading(buy or self to self due to existence of your order on opposite side)

@@ -36,7 +36,7 @@ class Simulator:
                 break
 
             cur_trades = self.trades[i]
-            my_bid, my_ask = self.model.bid_ask_limit_orders(
+            my_bids, my_asks = self.model.bid_ask_limit_orders(
                 order_book, diff[0] + market_latency, q
             )
             market_interaction = diff[0] + market_latency + local_latency
@@ -58,7 +58,7 @@ class Simulator:
                     )
                     last_trade_price = order_book.ask_price()
 
-            for my_order in [my_bid, my_ask]:
+            for my_order in my_bids + my_asks:
                 match_info = order_book.set_limit_order(my_order)
                 sign = 2 * my_order.side - 1
                 for k, v in match_info.items():
@@ -74,7 +74,6 @@ class Simulator:
                 if len(my_match_info):
                     q += sign * my_match_info[0]
                     wealth += -sign * my_match_info[1]
-                    last_trade_price = order_book.ask_price()
                     self.pnl_counter.change_pnl(
                         last_trade_price, order_book.ask_price(), q
                     )
