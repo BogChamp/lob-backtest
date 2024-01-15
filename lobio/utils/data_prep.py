@@ -6,8 +6,16 @@ from tqdm import tqdm
 from lobio.lob.limit_order import LimitOrder
 from lobio.lob.order_book import OrderBookPrep, Side, TraderId
 
+from typing import Tuple, Sequence
 
-def read_raw_data():
+def read_raw_data() -> Tuple[Sequence[dict], Sequence[dict], dict]:
+    """Read raw data, fetched from exchange.
+
+    Returns
+    -------
+        Tuple[Sequence[dict], Sequence[dict], dict]: list of incremental diffs, list of trades and lob state.
+        Incremental diffs and trades happened after lob state.
+    """
     with open("./data/diffs.json", "r", encoding="utf-8") as file_out:
         diffs = json.load(file_out)
 
@@ -33,11 +41,26 @@ def read_raw_data():
     return diffs, trades, init_lob
 
 
-def separate_trades_by_diff(diffs, trades):
+def separate_trades_by_diff(diffs: Sequence[dict], 
+                            trades: Sequence[dict]) -> Sequence[Sequence[Tuple[float, float, float]]]:
+    """Distribute all trades to incremental diffs.
+
+    Args:
+    ----
+        diffs (Sequence[dict]): list of diffs.
+        trades (Sequence[dict]): list of trades.
+
+    Returns:
+    -------
+        Sequence[Sequence]: list with length equal to diffs, each element of it is list with trades,
+        happened before current diff and after previous. Trade info containes timestamp in nanosecond, base and quote.
+    """
     trades_by_diff = []
 
     trades_index = 0
-    trades.append({"T":  np.inf}) # plug for case if all trades performed before last incremental diff
+    trades.append(
+        {"T": np.inf}
+    )  # plug for case if all trades performed before last incremental diff
     for v in diffs[1:]:
         time_to = v["E"]
         trades_after_diff = []
@@ -53,7 +76,18 @@ def separate_trades_by_diff(diffs, trades):
     return trades_by_diff
 
 
-def change_diffs(diffs):
+def change_diffs(diffs: Sequence[dict]) -> Sequence[Tuple[float, Sequence[Sequence[float]], Sequence[Sequence[float]]]]:
+    """Remove not necessary data from raw diff data from exchange.
+
+    Args:
+    ----
+        diffs (Sequence[dict]): list of diffs.
+
+    Returns:
+    -------
+        Sequence[Tuple[float, Sequence, Sequence]]: list, each element of it containes
+        timestamp of diff in nanoseconds, list of bid diffs and ask diffs.
+    """
     new_diffs = []
     for diff in diffs:
         new_diffs.append(
@@ -67,15 +101,23 @@ def change_diffs(diffs):
     return new_diffs
 
 
-def save_order_book(order_book):
+def save_order_book(order_book: OrderBookPrep):
+    """Save lob state with applied first loaded diff.
+
+    Saves last lob update timestamp in nanoseconds and list of bids and asks. 
+
+    Args:
+    ----
+        order_book (OrderBookPrep): lob state.
+    """
     bids_prepared = []
     asks_prepared = []
 
     for bid in order_book.bids:
-        bids_prepared.append([bid.price, bid.amount])
+        bids_prepared.append([bid.base, bid.quote])
 
     for ask in order_book.asks:
-        asks_prepared.append([ask.price, ask.amount])
+        asks_prepared.append([ask.base, ask.quote])
 
     init_lob_prepared = {
         "lastUpdateId": new_diffs[0][0],
@@ -87,7 +129,21 @@ def save_order_book(order_book):
         json.dump(init_lob_prepared, fp)
 
 
-def prepare_trades_diffs(order_book, new_diffs, trades_by_diff):
+def prepare_trades_diffs(order_book: OrderBookPrep, 
+                         new_diffs: Sequence[Tuple[float, Sequence[Sequence[float]], Sequence[Sequence[float]]]], 
+                         trades_by_diff: Sequence[Sequence[Tuple[float, float, float]]]) \
+                            -> Tuple[Sequence[Sequence[float | int]], 
+                                     Sequence[Tuple[float, Sequence[Sequence[float]], 
+                                                    Sequence[Sequence[float]]]]]:
+    """Prepare data for trades and diffs in convenient format.
+
+    For trades leave only timestamp in nanoseconds, price, amount and side.
+    For diffs leave timestamp in nanoseconds, list of bids and asks updates, containing price and value change.
+
+    Returns
+    -------
+        tuple: trades data and diffs data without trades influence.
+    """
     trades_prepared = []
     diffs_prepared = []
 
