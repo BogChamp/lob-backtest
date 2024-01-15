@@ -123,7 +123,7 @@ class AvellanedaStoikov:
 
     def bid_ask_limit_orders(
         self, lob_state: OrderBook, timestamp: float, q: Optional[float] = None
-    ) -> Tuple[Sequence[LimitOrder], Sequence[LimitOrder]]:
+    ) -> Tuple[list[LimitOrder], list[LimitOrder]]:
         """Creation of bid and ask orders lists.
 
         Args:

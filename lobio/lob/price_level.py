@@ -1,6 +1,6 @@
 from .limit_order import LimitOrder, AMOUNT_TICK
 from collections import defaultdict
-from typing import Tuple, Any
+from typing import Tuple
 
 class PriceLevel:
     """Class for FIFO logic handling on price level."""
@@ -44,7 +44,7 @@ class PriceLevel:
         else:
             self.traders_order.append(limit_order)
 
-    def execute_limit_order(self, quote: float) -> Tuple[float, defaultdict[int]]:
+    def execute_limit_order(self, quote: float) -> Tuple[float, defaultdict[int, int]]:
         """Remove part of price level due to exchange.
 
         Args:
@@ -53,7 +53,7 @@ class PriceLevel:
 
         Returns:
         -------
-            Tuple(float, defaultdict[Any, int]): remain quote after exchange and 
+            Tuple(float, defaultdict[int, int]): remain quote after exchange and 
                 dictionary with keys of traders ids and values as exchanged amount of quoted asset per trader id 
         """
         remain_amount = round(quote, AMOUNT_TICK)

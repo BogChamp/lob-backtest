@@ -1,21 +1,37 @@
-from typing import Sequence
+from typing import Sequence, Tuple
 from .accounting.pnl_counter import PnL_Counter
-from .lob.order_book import OrderBook, TraderId, PRICE_TICK, AMOUNT_TICK
+from .lob.order_book import OrderBook, TraderId, LimitOrder, PRICE_TICK, AMOUNT_TICK
 from .model.avellaneda_stoikov_model import AvellanedaStoikov
 from bisect import bisect_left
 from tqdm import tqdm
 
 
 class Simulator:
+    """Class with implementatation of simulation of historical lob dynamics."""
+
     def __init__(
         self,
-        diffs: Sequence[dict],
-        trades: Sequence[dict],
+        diffs: Sequence[Tuple[float, Sequence[float], Sequence[float]]],
+        trades: Sequence[Sequence[Tuple[float, LimitOrder]]],
         init_lob: dict,
         model: AvellanedaStoikov,
         pnl_counter: PnL_Counter,
         time_end: float,
     ):
+        """Set parameters and data for backtest.
+
+        Args:
+        ----
+            diffs (Sequence[Tuple[float, Sequence[float], Sequence[float]]]): diffs to be applied on LOB.
+            trades (Sequence[Sequence[Tuple[float, LimitOrder]]]): historical trades distributed between diffs.
+            Every bunch of trades applied before according diff.
+            init_lob (dict): initial LOB state.
+            model (AvellanedaStoikov): model for trading and setting orders.
+            pnl_counter (PnL_Counter): class for counting PnL.
+            time_end (float): final time in nanoseconds for trading simulation, after which simulation stops.
+        """
+        assert len(trades) == len(diffs)
+
         self.diffs = diffs
         self.trades = trades
         self.init_lob = init_lob
@@ -23,13 +39,32 @@ class Simulator:
         self.pnl_counter = pnl_counter
         self.time_end = time_end
 
-    def run(self, market_latency: int, local_latency: int):
+    def run(
+        self, market_latency: int, local_latency: int
+    ) -> Tuple[list[float], float, float]:
+        """Run backtest with given latencies.
+
+           Sequentially applies trades and diffs according to historical timestamps.
+           Calcultes and returns statistics.
+
+        Args:
+        ----
+            market_latency (int): latency on server, how long exchange takes time to process data.
+            local_latency (int): local latency, how much time needed for interaction with server.
+
+        Returns:
+        -------
+            Tuple[list[float], float, float]:
+            1. PnL graph
+            2. Our final quote amount
+            3. Our final base amount.
+        """
         order_book = OrderBook.create_lob_init(self.init_lob)
 
         last_trade_price = order_book.ask_price()
-        pnl_history = [0]
-        q = 0
-        wealth = 0
+        pnl_history = [0.0]
+        q = 0.0
+        wealth = 0.0
 
         for i, diff in enumerate(tqdm(self.diffs)):
             if diff[0] > self.time_end:
@@ -46,7 +81,7 @@ class Simulator:
             trades_before = cur_trades[:my_order_index]
             trades_after = cur_trades[my_order_index:]
 
-            for ts, limit_order in trades_before:
+            for _, limit_order in trades_before:
                 match_info = order_book.set_limit_order(limit_order)
                 sign = 2 * limit_order.side - 1
                 my_match_info = match_info[TraderId.MM]
@@ -61,13 +96,13 @@ class Simulator:
             for my_order in my_bids + my_asks:
                 match_info = order_book.set_limit_order(my_order)
                 sign = 2 * my_order.side - 1
-                for k, v in match_info.items():
+                for _, v in match_info.items():
                     q += -sign * v[0]
                     wealth += sign * v[1]
                 self.pnl_counter.change_pnl(last_trade_price, order_book.ask_price(), q)
                 last_trade_price = order_book.ask_price()
 
-            for ts, limit_order in trades_after:
+            for _, limit_order in trades_after:
                 match_info = order_book.set_limit_order(limit_order)
                 sign = 2 * limit_order.side - 1
                 my_match_info = match_info[TraderId.MM]

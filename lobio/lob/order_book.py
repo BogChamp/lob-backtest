@@ -98,7 +98,7 @@ class OrderBook:
     @staticmethod
     def matching_engine(
         price_levels: Sequence[PriceLevel], limit_order: LimitOrder
-    ) -> Tuple[defaultdict[list], float, int]:
+    ) -> Tuple[defaultdict[int, list[float]], float, int]:
         """Match of newly arrived order with price levels.
 
         Args:
@@ -108,7 +108,7 @@ class OrderBook:
 
         Returns:
         -------
-            Tuple[defaultdict[list], float, int]:
+            Tuple[defaultdict[int, list[float]], float, int]:
             1.dict with keys of traders ids who exchanged quote and values equal to [quote, amount of base spent or recieved].
             2.remained quote for trade after partial execution. If equal 0, then order executed entirely.
             3.index of price levels, from which new price levels should be started after order execution.
@@ -140,7 +140,7 @@ class OrderBook:
         
         return matches_info, remain_amount, i
 
-    def set_limit_order(self, limit_order: LimitOrder) -> defaultdict[list]:
+    def set_limit_order(self, limit_order: LimitOrder) -> defaultdict[int, list[float]]:
         """Adding of new limit order to a lob.
 
         Args:
@@ -153,7 +153,7 @@ class OrderBook:
 
         Returns:
         -------
-            defaultdict[list]: information about users, who traded quote, amount of quote and base traded per id.
+            defaultdict[int, list[float]]: information about users, who traded quote, amount of quote and base traded per id.
         """
         sign = 2 * limit_order.side - 1
         if sign == -1:
@@ -257,7 +257,7 @@ class OrderBook:
                     self.set_limit_order(
                         LimitOrder(update[0], update[1], side, TraderId.MARKET)
                     )
-            elif price_levels[index].price == update[0]:
+            elif price_levels[index].base == update[0]:
                 price_levels[index].change_liquidity(update[1], TraderId.MARKET)
                 if price_levels[index].quote == 0:
                     del price_levels[index]
