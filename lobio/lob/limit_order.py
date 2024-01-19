@@ -12,7 +12,7 @@ class LimitOrder:
         ----
             base (float): amount of based asset desired per quoted asset
             quote (float): amount of quoted asset wanted to trade
-            side (int): 1 - buy order, 0 - sell order
+            side (int): 0 - buy order, 1 - sell order
             trader_id (int): who set this limit order
         """
         base = round(base, PRICE_TICK)

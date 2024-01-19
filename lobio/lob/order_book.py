@@ -264,7 +264,7 @@ class OrderBook:
             else:
                 if update[1] > 0:
                     self.set_limit_order(
-                        LimitOrder(update[0], update[1], Side.BUY, TraderId.MARKET)
+                        LimitOrder(update[0], update[1], side, TraderId.MARKET)
                     )
 
     def apply_historical_update(self, updates: Tuple[float, Sequence, Sequence]):
