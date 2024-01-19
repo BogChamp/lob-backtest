@@ -1,10 +1,11 @@
 import numpy as np
 from lobio.lob.order_book import OrderBook, TraderId, Side
 from lobio.lob.limit_order import LimitOrder, PRICE_TICK
-from typing import Tuple, Optional, Sequence
+from lobio.model.base_model import Model
+from typing import Tuple, Optional
 
 
-class AvellanedaStoikov:
+class AvellanedaStoikov(Model):
     """Class containes Avellaneda Stoikov model implementation."""
 
     def __init__(
