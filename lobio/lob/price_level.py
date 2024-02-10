@@ -1,6 +1,20 @@
 from .limit_order import LimitOrder, AMOUNT_TICK
 from collections import defaultdict
-from typing import Tuple
+from typing import Tuple, Sequence
+from enum import IntEnum
+
+class Side(IntEnum):
+    """Class for LOB side: 0 if BUY, 1 if sell."""
+
+    BUY = 0
+    SELL = 1
+
+
+class TraderId(IntEnum):
+    """Traders id: market, us (MM), or particular trader."""
+
+    MARKET: int = 0
+    MM: int = 1
 
 class PriceLevel:
     """Class for FIFO logic handling on price level."""
@@ -60,8 +74,9 @@ class PriceLevel:
         match_info = defaultdict(int)  # trader_id - amount_sold
 
         for i, limit_order in enumerate(self.traders_order):
-            match_info[limit_order.trader_id] += min(limit_order.quote, remain_amount)
-            self.quote -= min(limit_order.quote, remain_amount)
+            min_quote = min(limit_order.quote, remain_amount)
+            match_info[limit_order.trader_id] += min_quote
+            self.quote -= min_quote
 
             if remain_amount < limit_order.quote:
                 limit_order.quote -= remain_amount
@@ -75,11 +90,12 @@ class PriceLevel:
         remain_amount = round(remain_amount, AMOUNT_TICK)
         self.quote = round(self.quote, AMOUNT_TICK)
         if self.quote == 0:
+            assert len(self.traders_order) == 0
             self.traders_order = []
 
         return remain_amount, match_info
 
-    def change_liquidity(self, quote: float, trader_id: int):
+    def change_liquidity(self, quote: float, trader_id: int): # СЛИЯНИЕ ОРДЕРОВ У ОДИНАКОВЫХ ИСТОЧНИКОВ ПРОДУМАТЬ !!!
         """Change of traders quote amount.
 
         Args:
@@ -93,8 +109,13 @@ class PriceLevel:
             self.add_limit_order(limit_order)
         else:
             quote = abs(quote)
+            skipped_orders = []
+            not_trader_amount = 0.0
+
             for i, limit_order in enumerate(self.traders_order):
                 if limit_order.trader_id != trader_id:
+                    skipped_orders.append(limit_order)
+                    not_trader_amount += limit_order.quote
                     continue
                 self.quote -= min(limit_order.quote, quote)
 
@@ -104,8 +125,16 @@ class PriceLevel:
                     break
                 else:
                     quote -= limit_order.quote
-                    del self.traders_order[i]
 
+            not_trader_amount = round(not_trader_amount, AMOUNT_TICK)
+            self.quote = round(self.quote, AMOUNT_TICK)
+            if self.quote == not_trader_amount:
+                self.traders_order = skipped_orders
+            else:
+                if i:
+                    self.traders_order = skipped_orders + self.traders_order[i:]
+        
         self.quote = round(self.quote, AMOUNT_TICK)
         if self.quote == 0:
+            assert len(self.traders_order) == 0
             self.traders_order = []

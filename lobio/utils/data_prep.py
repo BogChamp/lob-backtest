@@ -42,7 +42,7 @@ def read_raw_data() -> Tuple[Sequence[dict], Sequence[dict], dict]:
 
 
 def separate_trades_by_diff(diffs: Sequence[dict], 
-                            trades: Sequence[dict]) -> Sequence[Sequence[Tuple[float, float, float]]]:
+                            trades: Sequence[dict]) -> Sequence[Sequence[Tuple[float, float, float, int]]]:
     """Distribute all trades to incremental diffs.
 
     Args:
@@ -67,7 +67,7 @@ def separate_trades_by_diff(diffs: Sequence[dict],
         cur_trade = trades[trades_index]
         while cur_trade["T"] <= time_to:
             trades_after_diff.append(
-                (cur_trade["T"], float(cur_trade["p"]), float(cur_trade["q"]))
+                (cur_trade["T"], float(cur_trade["p"]), float(cur_trade["q"]), int(cur_trade["m"]))
             )
             trades_index += 1
             cur_trade = trades[trades_index]
@@ -131,8 +131,8 @@ def save_order_book(order_book: OrderBookPrep):
 
 def prepare_trades_diffs(order_book: OrderBookPrep, 
                          new_diffs: Sequence[Tuple[float, Sequence[Sequence[float]], Sequence[Sequence[float]]]], 
-                         trades_by_diff: Sequence[Sequence[Tuple[float, float, float]]]) \
-                            -> Tuple[Sequence[Sequence[float | int]], 
+                         trades_by_diff: Sequence[Sequence[Tuple[float, float, float, int]]]) \
+                            -> Tuple[Sequence[Sequence[float]], 
                                      Sequence[Tuple[float, Sequence[Sequence[float]], 
                                                     Sequence[Sequence[float]]]]]:
     """Prepare data for trades and diffs in convenient format.
@@ -150,10 +150,7 @@ def prepare_trades_diffs(order_book: OrderBookPrep,
     for i, diff in enumerate(tqdm(new_diffs[1:])):
         cur_trades = trades_by_diff[i]
         for trade in cur_trades:
-            if trade[1] >= order_book.ask_price():
-                side = Side.BUY
-            elif trade[1] <= order_book.bid_price():
-                side = Side.SELL
+            side = trade[3]
             order_book.set_limit_order(
                 LimitOrder(trade[1], trade[2], side, TraderId.MARKET)
             )

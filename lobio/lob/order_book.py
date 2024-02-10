@@ -3,25 +3,9 @@ from collections import defaultdict
 from bisect import bisect_left
 
 from .limit_order import LimitOrder, PRICE_TICK, AMOUNT_TICK
-from .price_level import PriceLevel
-from enum import IntEnum
+from .price_level import PriceLevel, Side, TraderId
 
 PRETTY_INDENT_OB: int = 36
-
-
-class Side(IntEnum):
-    """Class for LOB side: 0 if BUY, 1 if sell."""
-
-    BUY = 0
-    SELL = 1
-
-
-class TraderId(IntEnum):
-    """Traders id: market, us (MM), or particular trader."""
-
-    MARKET: int = 0
-    MM: int = 1
-
 
 class OrderBook:
     """Order Book Simulator."""
@@ -97,7 +81,8 @@ class OrderBook:
 
     @staticmethod
     def matching_engine(
-        price_levels: Sequence[PriceLevel], limit_order: LimitOrder
+        price_levels: Sequence[PriceLevel], 
+        limit_order: LimitOrder
     ) -> Tuple[defaultdict[int, list[float]], float, int]:
         """Match of newly arrived order with price levels.
 
@@ -118,9 +103,7 @@ class OrderBook:
         sign = 2 * limit_order.side - 1
         
         for i, price_level in enumerate(price_levels):
-            if (sign * price_level.base < sign * limit_order.base) or (
-                remain_amount == 0
-            ):
+            if (sign * price_level.base < sign * limit_order.base):
                 break
             this_price = price_level.base
             remain_amount, cur_match_info = price_level.execute_limit_order(
@@ -134,6 +117,9 @@ class OrderBook:
                 else:
                     trader_info = [v, v * this_price]
                 matches_info[k] = trader_info
+
+            if remain_amount == 0:
+                break
 
         if price_levels[i].quote == 0:
             i += 1
