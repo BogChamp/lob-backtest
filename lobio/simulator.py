@@ -4,7 +4,7 @@ from .lob.order_book import OrderBook, TraderId, LimitOrder, PRICE_TICK, AMOUNT_
 from .model.avellaneda_stoikov_model import AvellanedaStoikov
 from bisect import bisect_left
 from tqdm import tqdm
-
+from copy import deepcopy
 
 class Simulator:
     """Class with implementatation of simulation of historical lob dynamics."""
@@ -59,7 +59,11 @@ class Simulator:
             2. Our final quote amount
             3. Our final base amount.
         """
+        self.pnl_counter.reset()
+        self.model.reset()
+
         order_book = OrderBook.create_lob_init(self.init_lob)
+        trades = deepcopy(self.trades)
 
         last_trade_price = order_book.ask_price()
         pnl_history = [0.0]
@@ -70,28 +74,23 @@ class Simulator:
             if diff[0] > self.time_end:
                 break
 
-            cur_trades = self.trades[i]
+            cur_trades = trades[i]
+
             my_bids, my_asks = self.model.bid_ask_limit_orders(
                 order_book, diff[0] + market_latency, q
             )
-            market_interaction = diff[0] + market_latency + local_latency
+            my_order_setting_time = diff[0] + market_latency + local_latency
             my_order_index = bisect_left(
-                cur_trades, market_interaction, key=lambda x: x[0]
+                cur_trades, my_order_setting_time, key=lambda x: x[0]
             )
+
             trades_before = cur_trades[:my_order_index]
             trades_after = cur_trades[my_order_index:]
 
-            for _, limit_order in trades_before:
-                match_info = order_book.set_limit_order(limit_order)
-                sign = 2 * limit_order.side - 1
-                my_match_info = match_info[TraderId.MM]
-                if len(my_match_info):
-                    q += sign * my_match_info[0]
-                    wealth += -sign * my_match_info[1]
-                    self.pnl_counter.change_pnl(
-                        last_trade_price, order_book.ask_price(), q
-                    )
-                    last_trade_price = order_book.ask_price()
+            q_change, wealth_change = self.__apply_historical_trades(trades_before, order_book, last_trade_price)
+            q += q_change
+            wealth += wealth_change
+            last_trade_price = order_book.ask_price()
 
             for my_order in my_bids + my_asks:
                 match_info = order_book.set_limit_order(my_order)
@@ -102,17 +101,10 @@ class Simulator:
                 self.pnl_counter.change_pnl(last_trade_price, order_book.ask_price(), q)
                 last_trade_price = order_book.ask_price()
 
-            for _, limit_order in trades_after:
-                match_info = order_book.set_limit_order(limit_order)
-                sign = 2 * limit_order.side - 1
-                my_match_info = match_info[TraderId.MM]
-                if len(my_match_info):
-                    q += sign * my_match_info[0]
-                    wealth += -sign * my_match_info[1]
-                    self.pnl_counter.change_pnl(
-                        last_trade_price, order_book.ask_price(), q
-                    )
-                    last_trade_price = order_book.ask_price()
+            q_change, wealth_change = self.__apply_historical_trades(trades_after, order_book, last_trade_price)
+            q += q_change
+            wealth += wealth_change
+            last_trade_price = order_book.ask_price()
 
             q = round(q, AMOUNT_TICK)
             wealth = round(wealth, PRICE_TICK)
@@ -121,5 +113,26 @@ class Simulator:
 
         self.pnl_counter.change_pnl(last_trade_price, order_book.ask_price(), q)
         pnl_history.append(self.pnl_counter.pnl)
+        self.order_book = order_book
 
         return pnl_history, q, wealth
+
+    def __apply_historical_trades(self, trades: Sequence[Tuple[float, LimitOrder]], 
+                                  order_book: OrderBook,
+                                  last_trade_price: float):
+
+        q = 0
+        wealth = 0
+        for _, limit_order in trades:
+            match_info = order_book.set_limit_order(limit_order)
+            sign = 2 * limit_order.side - 1
+            my_match_info = match_info[TraderId.MM]
+            if len(my_match_info):
+                q += sign * my_match_info[0]
+                wealth += -sign * my_match_info[1]
+                self.pnl_counter.change_pnl(
+                    last_trade_price, order_book.ask_price(), q
+                )
+                last_trade_price = order_book.ask_price()
+        
+        return q, wealth

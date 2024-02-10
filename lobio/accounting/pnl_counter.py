@@ -8,8 +8,8 @@ class PnL_Counter:
         equal to traders money spent for quote.
         """
         self.pnl = 0.0
-        self.asset_purchased = 0.0
-        self.money_spent = 0.0
+        # self.asset_purchased = 0.0
+        # self.money_spent = 0.0
 
     def change_pnl(self, prev_price: float, cur_price: float, balance: float):
         """Calculation of PnL change due to exchange of trader.
@@ -21,6 +21,10 @@ class PnL_Counter:
             balance (float): quote amount of trader
         """
         self.pnl += (cur_price - prev_price) * balance
+    
+    def reset(self):
+        """Reseting pnl, setting to 0."""
+        self.pnl = 0
 
     # def update(self, asset_purchased, money_spent):
     #     self.asset_purchased += asset_purchased

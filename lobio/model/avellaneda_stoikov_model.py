@@ -39,6 +39,10 @@ class AvellanedaStoikov(Model):
         self.q_max = q_max
 
         self.q = self.q0
+    
+    def reset(self):
+        """Setting quote to 0."""
+        self.q = 0
 
     def get_indifference_price(self, mid_price: float, timestamp) -> float:
         """Calculate updated mid price.

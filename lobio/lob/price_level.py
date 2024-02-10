@@ -86,11 +86,10 @@ class PriceLevel:
                 break
             else:
                 remain_amount -= limit_order.quote
+                remain_amount = round(remain_amount, AMOUNT_TICK)
 
-        remain_amount = round(remain_amount, AMOUNT_TICK)
         self.quote = round(self.quote, AMOUNT_TICK)
         if self.quote == 0:
-            assert len(self.traders_order) == 0
             self.traders_order = []
 
         return remain_amount, match_info
