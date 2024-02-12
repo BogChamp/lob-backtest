@@ -4,7 +4,7 @@ from typing import Tuple, Sequence
 from enum import IntEnum
 
 class Side(IntEnum):
-    """Class for LOB side: 0 if BUY, 1 if sell."""
+    """Class for LOB side: 0 if BUY, 1 if SELL."""
 
     BUY = 0
     SELL = 1
@@ -34,6 +34,15 @@ class PriceLevel:
 
     def __repr__(self):
         return f"PriceLevel({self.base}, {self.quote}, {self.side})"
+    
+    def __eq__(self, other):
+        if not isinstance(other, PriceLevel):
+            return NotImplemented
+        
+        return self.base == other.base and \
+            self.quote == other.quote and \
+            self.side == other.side and \
+            self.traders_order == other.traders_order
 
     def add_limit_order(self, limit_order: LimitOrder):  # trader_id: 0 - market, 1 - MM
         """Addition of limit order to queue.
@@ -58,7 +67,7 @@ class PriceLevel:
         else:
             self.traders_order.append(limit_order)
 
-    def execute_limit_order(self, quote: float) -> Tuple[float, defaultdict[int, int]]:
+    def execute_limit_order(self, quote: float) -> Tuple[float, defaultdict[int, float]]:
         """Remove part of price level due to exchange.
 
         Args:
@@ -105,13 +114,13 @@ class PriceLevel:
         """
         if quote > 0:
             limit_order = LimitOrder(self.base, quote, self.side, trader_id)
-            self.add_limit_order(limit_order)
+            self.add_limit_order(limit_order) # THINK ABOUT AMOUNT BEFORE
         else:
             quote = abs(quote)
             skipped_orders = []
             not_trader_amount = 0.0
 
-            for i, limit_order in enumerate(self.traders_order):
+            for i, limit_order in enumerate(self.traders_order): ### ORDER Implies test cases
                 if limit_order.trader_id != trader_id:
                     skipped_orders.append(limit_order)
                     not_trader_amount += limit_order.quote
@@ -127,6 +136,7 @@ class PriceLevel:
 
             not_trader_amount = round(not_trader_amount, AMOUNT_TICK)
             self.quote = round(self.quote, AMOUNT_TICK)
+
             if self.quote == not_trader_amount:
                 self.traders_order = skipped_orders
             else:
@@ -135,5 +145,36 @@ class PriceLevel:
         
         self.quote = round(self.quote, AMOUNT_TICK)
         if self.quote == 0:
-            assert len(self.traders_order) == 0
             self.traders_order = []
+    
+    def change_liquidity_2(self, quote: float, trader_id: int):
+        if quote > 0:
+            limit_order = LimitOrder(self.base, quote, self.side, trader_id)
+            self.add_limit_order(limit_order)
+        else:
+            quote = abs(quote)
+            skipped_orders = []
+            not_trader_amount = 0.0
+
+            for i, limit_order in enumerate(self.traders_order[::-1]):
+                if limit_order.trader_id != trader_id:
+                    skipped_orders.append(limit_order)
+                    not_trader_amount += limit_order.quote
+                    continue
+                self.quote -= min(limit_order.quote, quote)
+
+                if quote < limit_order.quote:
+                    limit_order.quote -= quote
+                    limit_order.quote = round(limit_order.quote, AMOUNT_TICK)
+                    break
+                else:
+                    quote -= limit_order.quote
+
+            not_trader_amount = round(not_trader_amount, AMOUNT_TICK)
+            self.quote = round(self.quote, AMOUNT_TICK)
+
+            if self.quote == not_trader_amount:
+                self.traders_order = skipped_orders[::-1]
+            else:
+                if i:
+                    self.traders_order = self.traders_order[:-i] + skipped_orders[::-1]
