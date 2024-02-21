@@ -16,7 +16,7 @@ class AvellanedaStoikov(Model):
         k: float = 1.5,
         sigma: float = 2,
         gamma: float = 0.1,
-        q_max: float = 10**5,
+        q_max: float = 1,
     ):
         """Set AS model parameters.
 
@@ -28,7 +28,7 @@ class AvellanedaStoikov(Model):
             k (float, optional): k parameter. Defaults to 1.5.
             sigma (float, optional): volatility parameter. Defaults to 2.
             gamma (float, optional): gamma or risk parameter. Defaults to 0.1.
-            q_max (float, optional): limitation for quote. Defaults to 10**5.
+            q_max (float, optional): limitation for quote. Defaults to 1.
         """
         self.T = T
         self.t_start = t_start
@@ -145,7 +145,14 @@ class AvellanedaStoikov(Model):
             self.update_inventory(q)
         bid_price, ask_price = self.get_bid_ask_price(lob_state, timestamp)
 
-        bid_order = LimitOrder(bid_price, self.q_max, Side.BUY, TraderId.MM)
-        ask_order = LimitOrder(ask_price, self.q_max, Side.SELL, TraderId.MM)
+        if bid_price < lob_state.ask_price():
+            bid_orders = [LimitOrder(bid_price, self.q_max, Side.BUY, TraderId.MM)]
+        else:
+            bid_orders = [LimitOrder(lob_state.bid_price(), self.q_max, Side.BUY, TraderId.MM)]
+        
+        if ask_price > lob_state.bid_price():
+            ask_orders = [LimitOrder(ask_price, self.q_max, Side.SELL, TraderId.MM)]
+        else:
+            ask_orders = [LimitOrder(lob_state.ask_price(), self.q_max, Side.SELL, TraderId.MM)]
 
-        return [bid_order], [ask_order]
+        return bid_orders, ask_orders

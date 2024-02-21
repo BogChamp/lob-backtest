@@ -76,7 +76,7 @@ class PriceLevel:
 
         Returns:
         -------
-            Tuple(float, defaultdict[int, int]): remain quote after exchange and 
+            Tuple(float, defaultdict[int, float]): remain quote after exchange and 
                 dictionary with keys of traders ids and values as exchanged amount of quoted asset per trader id 
         """
         remain_amount = round(quote, AMOUNT_TICK)

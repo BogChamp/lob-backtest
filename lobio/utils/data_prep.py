@@ -167,6 +167,16 @@ if __name__ == "__main__":
 
     order_book = OrderBookPrep.create_lob_init(init_lob)
     order_book.track_diff(new_diffs[0])
+    diffs_maker_prepared = []
+
+    for diff in tqdm(new_diffs[1:]):
+        diffs_maker_prepared.append(order_book.track_diff(diff))
+    
+    with open("./data/diffs_maker_prepared.json", "w") as fp:
+        json.dump(diffs_maker_prepared, fp)
+
+    order_book = OrderBookPrep.create_lob_init(init_lob)
+    order_book.track_diff(new_diffs[0])
     save_order_book(order_book)
 
     trades_prepared, diffs_prepared = prepare_trades_diffs(

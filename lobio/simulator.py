@@ -45,7 +45,7 @@ class Simulator:
         """Run backtest with given latencies.
 
            Sequentially applies trades and diffs according to historical timestamps.
-           Calcultes and returns statistics.
+           Calculates and returns statistics.
 
         Args:
         ----
@@ -136,3 +136,44 @@ class Simulator:
                 last_trade_price = order_book.ask_price()
         
         return q, wealth
+
+    def run_maker(self, market_latency: int) -> Tuple[list[float], float, float]:
+        self.pnl_counter.reset()
+        self.model.reset()
+
+        order_book = OrderBook.create_lob_init(self.init_lob)
+        trades = deepcopy(self.trades)
+
+        last_trade_price = order_book.ask_price()
+        pnl_history = [0.0]
+        q = 0.0
+        wealth = 0.0
+
+        for i, diff in enumerate(tqdm(self.diffs)):
+            if diff[0] > self.time_end:
+                break
+
+            cur_trades = trades[i]
+
+            my_bids, my_asks = self.model.bid_ask_limit_orders(
+                order_book, diff[0] + market_latency, q
+            )
+
+            q_change, wealth_change = self.__apply_historical_trades(cur_trades, order_book, last_trade_price)
+            q += q_change
+            wealth += wealth_change
+            last_trade_price = order_book.ask_price()
+
+            for my_order in my_bids + my_asks:
+                match_info = order_book.set_limit_order(my_order)
+
+            q = round(q, AMOUNT_TICK)
+            wealth = round(wealth, PRICE_TICK)
+            pnl_history.append(self.pnl_counter.pnl)
+            order_book.apply_historical_update(diff)
+
+        self.pnl_counter.change_pnl(last_trade_price, order_book.ask_price(), q)
+        pnl_history.append(self.pnl_counter.pnl)
+        self.order_book = order_book
+
+        return pnl_history, q, wealth

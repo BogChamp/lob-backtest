@@ -54,6 +54,13 @@ class OrderBook:
             ob_repr += indent * " " + repr(p_l) + "\n"
 
         return ob_repr
+    
+    def __eq__(self, other):
+        if not isinstance(other, OrderBook):
+            return NotImplemented
+        
+        return self.bids == other.bids and \
+            self.asks == other.asks
 
     def get_state(self):
         return self.bids, self.asks
@@ -102,6 +109,9 @@ class OrderBook:
         remain_amount = limit_order.quote
         sign = 2 * limit_order.side - 1
         
+        if not len(price_levels):
+            return matches_info, remain_amount, 0
+
         for i, price_level in enumerate(price_levels):
             if (sign * price_level.base < sign * limit_order.base):
                 break
