@@ -1,6 +1,7 @@
 from typing import Sequence, Tuple
 from .accounting.pnl_counter import PnL_Counter
-from .lob.order_book import OrderBook, TraderId, LimitOrder, PRICE_TICK, AMOUNT_TICK
+from .lob.order_book import OrderBook, TraderId, LimitOrder, PRICE_TICK, AMOUNT_TICK, Side
+from .utils.utils import get_initial_order_book
 from .model.avellaneda_stoikov_model import AvellanedaStoikov
 from bisect import bisect_left
 from tqdm import tqdm
@@ -11,12 +12,12 @@ class Simulator:
 
     def __init__(
         self,
-        diffs: Sequence[Tuple[float, Sequence[float], Sequence[float]]],
-        trades: Sequence[Sequence[Tuple[float, LimitOrder]]],
-        init_lob: dict,
+        diffs: Sequence[Tuple[int, Sequence[int], Sequence[int]]],
+        orders: Sequence[Sequence[Tuple[int, int, int, int]]],
+        init_lob,
         model: AvellanedaStoikov,
         pnl_counter: PnL_Counter,
-        time_end: float,
+        time_end: int,
     ):
         """Set parameters and data for backtest.
 
@@ -30,10 +31,10 @@ class Simulator:
             pnl_counter (PnL_Counter): class for counting PnL.
             time_end (float): final time in nanoseconds for trading simulation, after which simulation stops.
         """
-        assert len(trades) == len(diffs)
+        assert len(orders) == len(diffs)
 
         self.diffs = diffs
-        self.trades = trades
+        self.orders = orders
         self.init_lob = init_lob
         self.model = model
         self.pnl_counter = pnl_counter
@@ -62,8 +63,8 @@ class Simulator:
         self.pnl_counter.reset()
         self.model.reset()
 
-        order_book = OrderBook.create_lob_init(self.init_lob)
-        trades = deepcopy(self.trades)
+        order_book = get_initial_order_book(self.init_lob)
+        orders = deepcopy(self.orders)
 
         last_trade_price = order_book.ask_price()
         pnl_history = [0.0]
@@ -74,7 +75,7 @@ class Simulator:
             if diff[0] > self.time_end:
                 break
 
-            cur_trades = trades[i]
+            cur_orders = orders[i]
 
             my_bids, my_asks = self.model.bid_ask_limit_orders(
                 order_book, diff[0] + market_latency, q
@@ -117,63 +118,79 @@ class Simulator:
 
         return pnl_history, q, wealth
 
-    def __apply_historical_trades(self, trades: Sequence[Tuple[float, LimitOrder]], 
+    def __apply_historical_orders(self, orders: Sequence[Tuple[int, int, int, int]], 
                                   order_book: OrderBook,
                                   last_trade_price: float):
 
-        q = 0
-        wealth = 0
-        for _, limit_order in trades:
-            match_info = order_book.set_limit_order(limit_order)
-            sign = 2 * limit_order.side - 1
-            my_match_info = match_info[TraderId.MM]
-            if len(my_match_info):
-                q += sign * my_match_info[0]
-                wealth += -sign * my_match_info[1]
-                self.pnl_counter.change_pnl(
-                    last_trade_price, order_book.ask_price(), q
-                )
-                last_trade_price = order_book.ask_price()
-        
-        return q, wealth
+        for _, *order_info in orders:
+            if order_info[1] > 0:
+                order_book.update_price_levels([[order_info[0], order_info[1]]], order_info[2])
+            else:
+                match_info = order_book.set_limit_order(LimitOrder(order_info[0], order_info[1], order_info[2], TraderId.MARKET))
+                self.q += match_info[0]
+                self.wealth += match_info[1]
+                # self.pnl_counter.change_pnl(
+                #     last_trade_price, order_book.ask_price(), self.q
+                # )
+                # last_trade_price = order_book.ask_price()
 
-    def run_maker(self, market_latency: int) -> Tuple[list[float], float, float]:
+    def run_maker(self, market_latency: int = 0, local_latency: int = 0) -> Tuple[list[float], float, float]:
         self.pnl_counter.reset()
         self.model.reset()
 
-        order_book = OrderBook.create_lob_init(self.init_lob)
-        trades = deepcopy(self.trades)
+        order_book = order_book = get_initial_order_book(self.init_lob)
+        orders = deepcopy(self.orders)
 
         last_trade_price = order_book.ask_price()
-        pnl_history = [0.0]
-        q = 0.0
-        wealth = 0.0
+        pnl_history = [0]
+        self.q = 0
+        self.wealth = 0
 
         for i, diff in enumerate(tqdm(self.diffs)):
             if diff[0] > self.time_end:
                 break
 
-            cur_trades = trades[i]
+            cur_orders = orders[i]
 
+            #print("Create bids")
             my_bids, my_asks = self.model.bid_ask_limit_orders(
-                order_book, diff[0] + market_latency, q
+                order_book, diff[0] + market_latency, self.q
             )
+            my_order_setting_time = diff[0] + market_latency + local_latency
+            #print("log search")
+            my_order_index = bisect_left(
+                cur_orders, my_order_setting_time, key=lambda x: x[0]
+            )
+            orders_before = cur_orders[:my_order_index]
+            orders_after = cur_orders[my_order_index:]
+            #print("apply before")
+            self.__apply_historical_orders(orders_before, order_book, last_trade_price)
 
-            q_change, wealth_change = self.__apply_historical_trades(cur_trades, order_book, last_trade_price)
-            q += q_change
-            wealth += wealth_change
+            #last_trade_price = order_book.ask_price()
+            #print("apply my")
+            for my_order in my_bids + my_asks:
+                if my_order.side == Side.BUY and my_order.base < order_book.ask_price():
+                    order_book.set_limit_order(my_order)
+                elif my_order.side == Side.SELL and my_order.base > order_book.bid_price():
+                    order_book.set_limit_order(my_order)
+            #print("apply after")
+            self.__apply_historical_orders(orders_after, order_book, last_trade_price)
+            #last_trade_price = order_book.ask_price()
+
+            pnl_history.append(self.pnl_counter.pnl)
+            #print("apply diff")
+            order_book.apply_historical_update(diff)
+            #print("intersect")
+            q_change, wealth_change = order_book.remove_bid_ask_intersection()
+            self.q += q_change
+            self.wealth += wealth_change
+            self.pnl_counter.change_pnl(
+                    last_trade_price, order_book.ask_price(), self.q
+                )
             last_trade_price = order_book.ask_price()
 
-            for my_order in my_bids + my_asks:
-                match_info = order_book.set_limit_order(my_order)
-
-            q = round(q, AMOUNT_TICK)
-            wealth = round(wealth, PRICE_TICK)
-            pnl_history.append(self.pnl_counter.pnl)
-            order_book.apply_historical_update(diff)
-
-        self.pnl_counter.change_pnl(last_trade_price, order_book.ask_price(), q)
+        self.pnl_counter.change_pnl(last_trade_price, order_book.ask_price(), self.q)
         pnl_history.append(self.pnl_counter.pnl)
         self.order_book = order_book
 
-        return pnl_history, q, wealth
+        return pnl_history, self.q, self.wealth

@@ -31,6 +31,11 @@ def read_raw_data() -> Tuple[Sequence[dict], Sequence[dict], dict]:
     i = 0
     while diffs[i]["u"] <= init_lob["lastUpdateId"]:
         i += 1
+    if len(diffs) > i:
+        if diffs[i]["U"] > init_lob["lastUpdateId"] + 1:
+            raise Exception("CORRUPTED DATA. DIFF. DEPTH are not consistent.")
+    else:
+        raise Exception("CORRUPTED DATA. DIFF. DEPTH are not consistent.")
     diffs = diffs[i:]
 
     i = 0
@@ -172,7 +177,7 @@ if __name__ == "__main__":
     for diff in tqdm(new_diffs[1:]):
         diffs_maker_prepared.append(order_book.track_diff(diff))
     
-    with open("./data/diffs_maker_prepared.json", "w") as fp:
+    with open("./data/diffs_only_prepared.json", "w") as fp:
         json.dump(diffs_maker_prepared, fp)
 
     order_book = OrderBookPrep.create_lob_init(init_lob)

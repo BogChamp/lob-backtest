@@ -16,7 +16,7 @@ class AvellanedaStoikov(Model):
         k: float = 1.5,
         sigma: float = 2,
         gamma: float = 0.1,
-        q_max: float = 1,
+        q_max: int = 1,
     ):
         """Set AS model parameters.
 
@@ -121,8 +121,8 @@ class AvellanedaStoikov(Model):
         bid_price = r - optimal_spread / 2
         ask_price = r + optimal_spread / 2
 
-        bid_price = round(bid_price, PRICE_TICK)
-        ask_price = round(ask_price, PRICE_TICK)
+        bid_price = round(bid_price)#round(bid_price, PRICE_TICK)
+        ask_price = round(ask_price)#round(ask_price, PRICE_TICK)
 
         return bid_price, ask_price
 
@@ -145,14 +145,15 @@ class AvellanedaStoikov(Model):
             self.update_inventory(q)
         bid_price, ask_price = self.get_bid_ask_price(lob_state, timestamp)
 
-        if bid_price < lob_state.ask_price():
-            bid_orders = [LimitOrder(bid_price, self.q_max, Side.BUY, TraderId.MM)]
-        else:
-            bid_orders = [LimitOrder(lob_state.bid_price(), self.q_max, Side.BUY, TraderId.MM)]
-        
-        if ask_price > lob_state.bid_price():
-            ask_orders = [LimitOrder(ask_price, self.q_max, Side.SELL, TraderId.MM)]
-        else:
-            ask_orders = [LimitOrder(lob_state.ask_price(), self.q_max, Side.SELL, TraderId.MM)]
+        # if bid_price < lob_state.ask_price():
+        #     bid_orders = [LimitOrder(bid_price, self.q_max, Side.BUY, TraderId.MM)]
+        # else:
+        #     bid_orders = [LimitOrder(lob_state.bid_price(), self.q_max, Side.BUY, TraderId.MM)]
 
+        # if ask_price > lob_state.bid_price():
+        #     ask_orders = [LimitOrder(ask_price, self.q_max, Side.SELL, TraderId.MM)]
+        # else:
+        #     ask_orders = [LimitOrder(lob_state.ask_price(), self.q_max, Side.SELL, TraderId.MM)]
+        bid_orders = [LimitOrder(bid_price, self.q_max, Side.BUY, TraderId.MM)]
+        ask_orders = [LimitOrder(ask_price, self.q_max, Side.SELL, TraderId.MM)]
         return bid_orders, ask_orders

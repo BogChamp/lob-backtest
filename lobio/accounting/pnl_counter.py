@@ -7,11 +7,11 @@ class PnL_Counter:
         PnL variable trackes PnL, asset_purchased equal to quote amount of trader and money_spent
         equal to traders money spent for quote.
         """
-        self.pnl = 0.0
+        self.pnl = 0
         # self.asset_purchased = 0.0
         # self.money_spent = 0.0
 
-    def change_pnl(self, prev_price: float, cur_price: float, balance: float):
+    def change_pnl(self, prev_price: int, cur_price: int, balance: int):
         """Calculation of PnL change due to exchange of trader.
 
         Args:

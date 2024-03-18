@@ -59,8 +59,7 @@ class OrderBook:
         if not isinstance(other, OrderBook):
             return NotImplemented
         
-        return self.bids == other.bids and \
-            self.asks == other.asks
+        return self.bids == other.bids and self.asks == other.asks
 
     def get_state(self):
         return self.bids, self.asks
@@ -86,11 +85,22 @@ class OrderBook:
     def market_depth(self):
         return self.asks[-1].base - self.bids[-1].base
 
+    def get_top_n(self, n: int = 10) -> Tuple[list[PriceLevel], list[PriceLevel]]:
+        """Returns top n bids and asks
+
+        Args:
+            n (int, optional): number of levels to return. Defaults to 10.
+
+        Returns:
+            Tuple[list[PriceLevel], list[PriceLevel]]: tuple of bids and asks lists with n top levels.
+        """
+        return self.bids[:n], self.asks[:n]
+
     @staticmethod
     def matching_engine(
         price_levels: Sequence[PriceLevel], 
         limit_order: LimitOrder
-    ) -> Tuple[defaultdict[int, list[float]], float, int]:
+    ) -> Tuple[Tuple[int, int], float, int]:
         """Match of newly arrived order with price levels.
 
         Args:
@@ -100,20 +110,20 @@ class OrderBook:
 
         Returns:
         -------
-            Tuple[defaultdict[int, list[float]], float, int]:
+            Tuple[dict[TraderId, list[int]], float, int]:
             1.dict with keys of traders ids who exchanged quote and values equal to [quote, amount of base spent or recieved].
             2.remained quote for trade after partial execution. If equal 0, then order executed entirely.
             3.index of price levels, from which new price levels should be started after order execution.
         """
-        matches_info = defaultdict(list)
+        matches_info = {TraderId.MM: [0, 0], TraderId.MARKET: [0, 0]}
         remain_amount = limit_order.quote
-        sign = 2 * limit_order.side - 1
+        #sign = 2 * limit_order.side - 1
         
         if not len(price_levels):
             return matches_info, remain_amount, 0
 
         for i, price_level in enumerate(price_levels):
-            if (sign * price_level.base < sign * limit_order.base):
+            if (limit_order.side * price_level.base < limit_order.side * limit_order.base):
                 break
             this_price = price_level.base
             remain_amount, cur_match_info = price_level.execute_limit_order(
@@ -121,11 +131,8 @@ class OrderBook:
             )
             for k, v in cur_match_info.items():
                 trader_info = matches_info[k]
-                if len(trader_info):
-                    trader_info[0] += v
-                    trader_info[1] += v * this_price
-                else:
-                    trader_info = [v, v * this_price]
+                trader_info[0] += v
+                trader_info[1] += -v * this_price
                 matches_info[k] = trader_info
 
             if remain_amount == 0:
@@ -134,9 +141,9 @@ class OrderBook:
         if price_levels[i].quote == 0:
             i += 1
         
-        return matches_info, remain_amount, i
+        return matches_info[TraderId.MM], remain_amount, i
 
-    def set_limit_order(self, limit_order: LimitOrder) -> defaultdict[int, list[float]]:
+    def set_limit_order(self, limit_order: LimitOrder) -> Tuple[int, int]:
         """Adding of new limit order to a lob.
 
         Args:
@@ -149,13 +156,13 @@ class OrderBook:
 
         Returns:
         -------
-            defaultdict[int, list[float]]: information about users, who traded quote, amount of quote and base traded per id.
+            dict[TraderId, list[int]]: information about users, who traded quote, amount of quote and base traded per id.
         """
-        sign = 2 * limit_order.side - 1
-        if sign == -1:
+        #sign = 2 * limit_order.side - 1
+        if limit_order.side == Side.BUY:
             price_levels = self.bids
             opposite_price_levels = self.asks
-        elif sign == 1:
+        elif limit_order.side == Side.SELL:
             price_levels = self.asks
             opposite_price_levels = self.bids
         else:
@@ -166,7 +173,7 @@ class OrderBook:
             opposite_price_levels, limit_order
         )
 
-        if sign == -1:
+        if limit_order.side == Side.BUY:
             self.asks = self.asks[p_l_eaten:]
         else:
             self.bids = self.bids[p_l_eaten:]
@@ -182,7 +189,7 @@ class OrderBook:
                 price_levels.insert(0, PriceLevel(new_limit_order))
             else:
                 index = bisect_left(
-                    price_levels, sign * limit_order.base, key=lambda x: sign * x.base
+                    price_levels, limit_order.side * limit_order.base, key=lambda x: limit_order.side * x.base
                 )
                 if index == len(price_levels):
                     price_levels.append(PriceLevel(limit_order))
@@ -224,7 +231,7 @@ class OrderBook:
 
         return cls(bids, asks)
 
-    def update_limit_orders(self, updates: Sequence[Sequence[float]], side: int):
+    def update_price_levels(self, updates: Sequence[Tuple[int, int]], side: int): # Создаю лимит внутри, мб надо снаружи?
         """Update price level according to given side and prices with values of change.
 
         Args:
@@ -236,7 +243,7 @@ class OrderBook:
         ------
             Exception: if wrong side specified. (not 0 buy or 1 sell)
         """
-        sign = 2 * side - 1
+        #sign = 2 * side - 1
         if side == Side.BUY:
             price_levels = self.bids
         elif side == Side.SELL:
@@ -245,25 +252,29 @@ class OrderBook:
             raise Exception("Wrong side!")
 
         for update in updates:  # THINK ABOUT ORDER OF PRICE CHANGES
+            price = update[0] #round(update[0], PRICE_TICK)
+            amount = update[1] #round(update[1], AMOUNT_TICK)
             index = bisect_left(
-                price_levels, sign * update[0], key=lambda x: sign * x.base
+                price_levels, side * price, key=lambda x: side * x.base
             )
             if index == len(price_levels):
-                if update[1] > 0:
-                    self.set_limit_order(
-                        LimitOrder(update[0], update[1], side, TraderId.MARKET)
+                if amount > 0:
+                    price_levels.append(
+                        PriceLevel(LimitOrder(price, amount, side, TraderId.MARKET))
                     )
-            elif price_levels[index].base == update[0]:
-                price_levels[index].change_liquidity(update[1], TraderId.MARKET)
+            elif price_levels[index].base == price:
+                amount_change = amount - price_levels[index].quote
+                price_levels[index].change_liquidity(amount_change, TraderId.MARKET)
                 if price_levels[index].quote == 0:
                     del price_levels[index]
             else:
-                if update[1] > 0:
-                    self.set_limit_order(
-                        LimitOrder(update[0], update[1], side, TraderId.MARKET)
+                if amount > 0:
+                    price_levels.insert(
+                        index,
+                        PriceLevel(LimitOrder(price, amount, side, TraderId.MARKET)),
                     )
 
-    def apply_historical_update(self, updates: Tuple[float, Sequence, Sequence]):
+    def apply_historical_update(self, updates: Tuple[int, Sequence[Tuple[int, int]], Sequence[Tuple[int, int]]]):
         """Perform changes on order book according to historical dynamic movements of LOB.
 
         Args:
@@ -274,9 +285,26 @@ class OrderBook:
         bids_update = updates[1]
         asks_update = updates[2]
 
-        self.update_limit_orders(bids_update, Side.BUY)
-        self.update_limit_orders(asks_update, Side.SELL)
+        self.update_price_levels(bids_update, Side.BUY)
+        self.update_price_levels(asks_update, Side.SELL)
 
+    def remove_bid_ask_intersection(self) -> Tuple[int, int]:
+        #matches_info = {TraderId.MM: [0, 0], TraderId.MARKET: [0, 0]}
+        # if self.bids[0].base >= self.asks[0].base:
+        #     print(self.bids[:5], self.asks[:5])
+        my_data = [0, 0]
+        while self.bids[0].base >= self.asks[0].base:
+            #print(self.bids[:5], self.asks[:5])
+            limit_orders = self.bids[0].traders_order
+            self.bids = self.bids[1:]
+            for limit_order in limit_orders:
+                cur_match_info = self.set_limit_order(limit_order)
+                my_data[0] += cur_match_info[0]
+                my_data[1] += cur_match_info[0]
+            # print(self.bids[:5], self.asks[:5])
+            # raise Exception
+        return my_data
+        
 
 class OrderBookPrep(OrderBook):
     """Order Book class for data preparation for backtest.
@@ -305,18 +333,18 @@ class OrderBookPrep(OrderBook):
             Sequence[Sequence[float]]: list of updated diffs.
         """
         diff_new = []
-        sign = 2 * side - 1
-        if sign == -1:
+        # sign = 2 * side - 1
+        if side == Side.BUY:
             price_levels = self.bids
-        elif sign == 1:
+        elif side == Side.SELL:
             price_levels = self.asks
         else:
             raise Exception("WRONG SIDE")
 
         for price_level in update:
-            price = round(price_level[0], PRICE_TICK)
-            amount = round(price_level[1], AMOUNT_TICK)
-            index = bisect_left(price_levels, sign * price, key=lambda x: sign * x.base)
+            price = price_level[0]#round(price_level[0], PRICE_TICK)
+            amount = price_level[1]#round(price_level[1], AMOUNT_TICK)
+            index = bisect_left(price_levels, side * price, key=lambda x: side * x.base)
             if index == len(price_levels):
                 if amount > 0:
                     price_levels.append(
@@ -324,7 +352,7 @@ class OrderBookPrep(OrderBook):
                     )
                     diff_new.append([price, amount])
             elif price_levels[index].base == price:
-                amount_change = round(amount - price_levels[index].quote, AMOUNT_TICK)
+                amount_change = amount - price_levels[index].quote #round(amount - price_levels[index].quote, AMOUNT_TICK)
                 if amount_change != 0:
                     diff_new.append([price, amount_change])
                     price_levels[index].change_liquidity(amount_change, TraderId.MARKET)

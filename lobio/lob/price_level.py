@@ -4,9 +4,9 @@ from typing import Tuple, Sequence
 from enum import IntEnum
 
 class Side(IntEnum):
-    """Class for LOB side: 0 if BUY, 1 if SELL."""
+    """Class for LOB side: -1 if BUY, 1 if SELL."""
 
-    BUY = 0
+    BUY = -1
     SELL = 1
 
 
@@ -15,6 +15,7 @@ class TraderId(IntEnum):
 
     MARKET: int = 0
     MM: int = 1
+
 
 class PriceLevel:
     """Class for FIFO logic handling on price level."""
@@ -55,49 +56,50 @@ class PriceLevel:
         assert limit_order.side == self.side
 
         self.quote += limit_order.quote
-        self.quote = round(self.quote, AMOUNT_TICK)
+        #self.quote = round(self.quote, AMOUNT_TICK)
         if len(self.traders_order):
             if limit_order.trader_id == self.traders_order[-1].trader_id:
                 self.traders_order[-1].quote += limit_order.quote
-                self.traders_order[-1].quote = round(
-                    self.traders_order[-1].quote, AMOUNT_TICK
-                )
+                # self.traders_order[-1].quote = round(
+                #     self.traders_order[-1].quote, AMOUNT_TICK
+                # )
             else:
                 self.traders_order.append(limit_order)
         else:
             self.traders_order.append(limit_order)
 
-    def execute_limit_order(self, quote: float) -> Tuple[float, defaultdict[int, float]]:
+    def execute_limit_order(self, quote: int) -> Tuple[int, dict[TraderId, int]]:
         """Remove part of price level due to exchange.
 
         Args:
         ----
-            quote (float): how much quote to remove
+            quote (int): how much quote to remove
 
         Returns:
         -------
             Tuple(float, defaultdict[int, float]): remain quote after exchange and 
                 dictionary with keys of traders ids and values as exchanged amount of quoted asset per trader id 
         """
-        remain_amount = round(quote, AMOUNT_TICK)
-        match_info = defaultdict(int)  # trader_id - amount_sold
+        remain_amount = quote #round(quote, AMOUNT_TICK)
+        match_info = {TraderId.MARKET: 0, TraderId.MM: 0}  # trader_id - amount_sold
 
         for i, limit_order in enumerate(self.traders_order):
             min_quote = min(limit_order.quote, remain_amount)
-            match_info[limit_order.trader_id] += min_quote
+            match_info[limit_order.trader_id] += -limit_order.side * min_quote # correct calculating of asset dynamic
+            match_info[1 - limit_order.trader_id] += limit_order.side * min_quote
             self.quote -= min_quote
 
             if remain_amount < limit_order.quote:
                 limit_order.quote -= remain_amount
-                limit_order.quote = round(limit_order.quote, AMOUNT_TICK)
+                #limit_order.quote = round(limit_order.quote, AMOUNT_TICK)
                 self.traders_order = self.traders_order[i:]
                 remain_amount = 0
                 break
             else:
                 remain_amount -= limit_order.quote
-                remain_amount = round(remain_amount, AMOUNT_TICK)
+                #remain_amount = round(remain_amount, AMOUNT_TICK)
 
-        self.quote = round(self.quote, AMOUNT_TICK)
+        #self.quote = round(self.quote, AMOUNT_TICK)
         if self.quote == 0:
             self.traders_order = []
 
@@ -129,13 +131,13 @@ class PriceLevel:
 
                 if quote < limit_order.quote:
                     limit_order.quote -= quote
-                    limit_order.quote = round(limit_order.quote, AMOUNT_TICK)
+                    #limit_order.quote = round(limit_order.quote, AMOUNT_TICK)
                     break
                 else:
                     quote -= limit_order.quote
 
-            not_trader_amount = round(not_trader_amount, AMOUNT_TICK)
-            self.quote = round(self.quote, AMOUNT_TICK)
+            #not_trader_amount = round(not_trader_amount, AMOUNT_TICK)
+            #self.quote = round(self.quote, AMOUNT_TICK)
 
             if self.quote == not_trader_amount:
                 self.traders_order = skipped_orders
@@ -143,7 +145,7 @@ class PriceLevel:
                 if i:
                     self.traders_order = skipped_orders + self.traders_order[i:]
         
-        self.quote = round(self.quote, AMOUNT_TICK)
+        #self.quote = round(self.quote, AMOUNT_TICK)
         if self.quote == 0:
             self.traders_order = []
     
@@ -165,16 +167,19 @@ class PriceLevel:
 
                 if quote < limit_order.quote:
                     limit_order.quote -= quote
-                    limit_order.quote = round(limit_order.quote, AMOUNT_TICK)
+                    #limit_order.quote = round(limit_order.quote, AMOUNT_TICK)
                     break
                 else:
                     quote -= limit_order.quote
 
-            not_trader_amount = round(not_trader_amount, AMOUNT_TICK)
-            self.quote = round(self.quote, AMOUNT_TICK)
+            #not_trader_amount = round(not_trader_amount, AMOUNT_TICK)
+            #self.quote = round(self.quote, AMOUNT_TICK)
 
             if self.quote == not_trader_amount:
                 self.traders_order = skipped_orders[::-1]
             else:
                 if i:
                     self.traders_order = self.traders_order[:-i] + skipped_orders[::-1]
+
+        if self.quote == 0:
+            self.traders_order = []
