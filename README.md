@@ -19,7 +19,6 @@ pip install -e .
 1) Think about order of applying historical incremental order book updates
 2) Think about self trading(buy or self to self due to existence of your order on opposite side)
 3) Contain only top k levels of bids and asks. Reorganaize data for it
-4) Perform Only making strategy???
-5) diff + with my trade at this stage.
-6) diff - with my order at price level.
-7) use numba, cython, jax, etc.
+4) diff + with my trade at this stage.
+5) diff - with my order at price level.
+6) use numba, cython, jax, etc. dataclasses slots=true

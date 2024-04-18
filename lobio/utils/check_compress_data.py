@@ -2,9 +2,12 @@ import json
 import numpy as np
 import polars as pl
 from typing import Sequence, Tuple
+from loguru import logger
+from tqdm import tqdm
+
 from lobio.lob.limit_order import PRICE_TICK, AMOUNT_TICK
 from lobio.lob.price_level import Side
-from lobio.lob.order_book import OrderBookPrep, OrderBook
+from lobio.lob.order_book import OrderBookSimple
 
 def read_raw_data() -> Tuple[Sequence[dict], Sequence[dict], dict]:
     """Read raw data, fetched from exchange.
@@ -70,7 +73,7 @@ def cut_trades(trades: Sequence[dict], timestamp: int) -> Sequence[dict]:
 
 def convert_diffs(diffs: Sequence[dict]) -> Sequence[Tuple[int, Sequence[Tuple[float, float]], Sequence[Tuple[float, float]]]]:
     new_diffs = []
-    for diff in diffs:
+    for diff in tqdm(diffs):
         cur_bids = np.array(diff["b"]).astype(float)
         cur_asks = np.array(diff["a"]).astype(float)
         new_diffs.append(
@@ -82,9 +85,9 @@ def convert_diffs(diffs: Sequence[dict]) -> Sequence[Tuple[int, Sequence[Tuple[f
         )
     return new_diffs
 
-def compress_diffs(diffs: Sequence[Tuple[int, Sequence[Tuple[float, float]], Sequence[Tuple[float, float]]]]) -> pl.DataFrame:
+def compress_diffs(diffs: Sequence[Tuple[int, Sequence[Tuple[float, float]], Sequence[Tuple[float, float]]]]) -> np.ndarray[int]:
     diff_sequence = []
-    for diff in diffs:
+    for diff in tqdm(diffs):
         ts = diff[0]
         bids = diff[1]
         asks = diff[2]
@@ -95,23 +98,29 @@ def compress_diffs(diffs: Sequence[Tuple[int, Sequence[Tuple[float, float]], Seq
         for ask in asks:
             diff_sequence.append((ts, ask[0], ask[1], Side.SELL))
 
-    diffs_prepared = pl.DataFrame(diff_sequence, ('T', 'base', 'quote', 'side'))
-    diffs_prepared = diffs_prepared.with_columns((pl.col('base') * 10**PRICE_TICK).round().cast(pl.UInt32), 
-                       (pl.col('quote') * 10**AMOUNT_TICK).round().cast(pl.UInt64), 
-                       pl.col('side').cast(pl.Int8),
-                       pl.col('T').cast(pl.UInt64))
-    return diffs_prepared
+    diffs_prepared = np.array(diff_sequence)
+    diffs_prepared[:, 1] *= 10**PRICE_TICK
+    diffs_prepared[:, 2] *= 10**AMOUNT_TICK
+    return diffs_prepared.round().astype(int)
+    # diffs_prepared = pl.DataFrame(diff_sequence, ('T', 'base', 'quote', 'side'))
+    # diffs_prepared = diffs_prepared.with_columns((pl.col('base') * 10**PRICE_TICK).round().cast(pl.UInt32), 
+    #                    (pl.col('quote') * 10**AMOUNT_TICK).round().cast(pl.UInt64), 
+    #                    pl.col('side').cast(pl.Int8),
+    #                    pl.col('T').cast(pl.UInt64))
+    # return diffs_prepared
 
-def compress_init_lob(order_book: OrderBook, timestamp: int) -> np.ndarray[int]:
-    bids_prepared = []
-    asks_prepared = []
+def compress_init_lob(order_book: OrderBookSimple, timestamp: int) -> np.ndarray[int]:
+    # bids_prepared = []
+    # asks_prepared = []
     min_len = min(len(order_book.bids), len(order_book.asks))
 
-    for bid in order_book.bids[:min_len]:
-        bids_prepared.append([bid.base, bid.quote])
+    # for bid in order_book.bids[:min_len]:
+    #     bids_prepared.append([bid[0], bid[1]])
 
-    for ask in order_book.asks[:min_len]:
-        asks_prepared.append([ask.base, ask.quote])
+    # for ask in order_book.asks[:min_len]:
+    #     asks_prepared.append([ask[0], ask[1]])
+    bids_prepared = order_book.bids[:min_len]
+    asks_prepared = order_book.asks[:min_len]
 
     init_lob_data = np.concatenate([bids_prepared, asks_prepared], axis=1)
     init_lob_data[:, [0, 2]] *= 10**PRICE_TICK
@@ -121,18 +130,22 @@ def compress_init_lob(order_book: OrderBook, timestamp: int) -> np.ndarray[int]:
 
     return init_lob_data
 
-def compress_trades(trades: Sequence[dict]) -> pl.DataFrame:
+def compress_trades(trades: Sequence[dict]) -> np.ndarray[int]:
     trades_raw = []
-    for trade in trades:
+    for trade in tqdm(trades):
         side = Side.SELL if trade['m'] else Side.BUY
         trades_raw.append((trade['T'], float(trade['p']), float(trade['q']), side))
 
-    trades_raw = pl.DataFrame(trades_raw, ('T', 'base', 'quote', 'side'))
-    trades_raw = trades_raw.with_columns((pl.col('base') * 10**PRICE_TICK).round().cast(pl.UInt32), 
-                        (pl.col('quote') * 10**AMOUNT_TICK).round().cast(pl.UInt64), 
-                        pl.col('side').cast(pl.Int8),
-                        pl.col('T').cast(pl.UInt64))
-    return trades_raw
+    trades_raw = np.array(trades_raw)
+    trades_raw[:, 1] *= 10**PRICE_TICK
+    trades_raw[:, 2] *= 10**AMOUNT_TICK
+    return trades_raw.round().astype(int)
+    # trades_raw = pl.DataFrame(trades_raw, ('T', 'base', 'quote', 'side'))
+    # trades_raw = trades_raw.with_columns((pl.col('base') * 10**PRICE_TICK).round().cast(pl.UInt32), 
+    #                     (pl.col('quote') * 10**AMOUNT_TICK).round().cast(pl.UInt64), 
+    #                     pl.col('side').cast(pl.Int8),
+    #                     pl.col('T').cast(pl.UInt64))
+    # return trades_raw
 
 if __name__ == "__main__":
     diffs, aggtrades, init_lob = read_raw_data()
@@ -142,16 +155,25 @@ if __name__ == "__main__":
     diffs = cut_diffs(diffs, init_lob["lastUpdateId"])
     aggtrades = cut_trades(aggtrades, diffs[0]["T"])
 
+    logger.info("converting diffs to easier format")
     new_diffs = convert_diffs(diffs)
-    order_book = OrderBookPrep.create_lob_init(init_lob)
-    order_book.track_diff(new_diffs[0])
+    order_book = OrderBookSimple.create_lob_init(init_lob)
+    order_book.apply_historical_update(new_diffs[0])
     new_diffs = new_diffs[1:]
 
+    logger.info("compressing initial lob state")
     compressed_init_lob = compress_init_lob(order_book, diffs[0]['T'])
+    logger.info("compressing diffs")
     compressed_diffs = compress_diffs(new_diffs)
+    logger.info("compressing trades")
     compressed_trades = compress_trades(aggtrades)
 
-    with open('./data/init_lob_prepared.npy', 'wb') as f:
+    with open('./data/init_lob_raw.npy', 'wb') as f:
         np.save(f, compressed_init_lob)
-    compressed_diffs.write_parquet("./data/diffs_prepared.parquet")
-    compressed_trades.write_parquet("./data/aggtrades_raw.parquet")
+    with open('./data/diffs_raw.npy', 'wb') as f:
+        np.save(f, compressed_diffs)
+    with open('./data/aggtrades_raw.npy', 'wb') as f:
+        np.save(f, compressed_trades)
+    # compressed_diffs.write_parquet("./data/diffs_raw.parquet")
+    # compressed_trades.write_parquet("./data/aggtrades_raw.parquet")
+    logger.info("check and compression completed!")

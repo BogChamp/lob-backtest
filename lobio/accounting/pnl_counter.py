@@ -1,30 +1,30 @@
+import numpy as np
+
+
 class PnL_Counter:
     """Class for pnl counting."""
 
-    def __init__(self):
-        """Creation of pnl counter.
-        
-        PnL variable trackes PnL, asset_purchased equal to quote amount of trader and money_spent
-        equal to traders money spent for quote.
-        """
-        self.pnl = 0
+    def __init__(self, q0: int = 0):
+        self.q0 = q0
+        self.quote_history = [q0]
+        self.price_history = []
         # self.asset_purchased = 0.0
         # self.money_spent = 0.0
 
-    def change_pnl(self, prev_price: int, cur_price: int, balance: int):
-        """Calculation of PnL change due to exchange of trader.
-
-        Args:
-        ----
-            prev_price (float): price of quote before exchange
-            cur_price (float): price of quote after exchange
-            balance (float): quote amount of trader
-        """
-        self.pnl += (cur_price - prev_price) * balance
+    def collect_statistic(self, new_q: int, new_price: float):
+        self.quote_history.append(new_q)
+        self.price_history.append(new_price)
     
+    def calculate_pnl(self) -> int:
+        pnl = []
+        for i, price in enumerate(self.price_history):
+            pnl.append(price * (self.quote_history[i+1] - self.quote_history[i]))
+        return np.cumsum(pnl)
+
     def reset(self):
-        """Reseting pnl, setting to 0."""
-        self.pnl = 0
+        self.quote_history = [self.q0]
+        self.price_history = []
+    
 
     # def update(self, asset_purchased, money_spent):
     #     self.asset_purchased += asset_purchased

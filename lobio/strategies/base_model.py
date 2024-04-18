@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from typing import Tuple, Optional
-from lobio.lob.limit_order import LimitOrder
+from lobio.lob.limit_order import Order
 
 class Model(ABC):
     @abstractmethod
@@ -12,6 +12,6 @@ class Model(ABC):
         pass
     
     @abstractmethod
-    def bid_ask_limit_orders() -> Tuple[list[LimitOrder], list[LimitOrder]]:
+    def bid_ask_limit_orders() -> Tuple[list[Order], list[Order]]:
         pass
 
