@@ -28,6 +28,7 @@ if __name__ == "__main__":
     MAX_PAST_DIFFS = 30
     last_bid_states = []
     last_ask_states = []
+    last_pl_removed = []
     possible_ts = []
     for i, diff in enumerate(tqdm(diffs_grouped)):
         last_bid_states.append((i, deepcopy(ob.bids)))
@@ -37,6 +38,7 @@ if __name__ == "__main__":
         if len(last_ask_states) > MAX_PAST_DIFFS:
             del last_ask_states[0]
 
+        cur_pl_removed = set()
         cur_orders = orders_per_diff[i]
         for _, order in cur_orders:
             if order.type == OrderType.MARKET:
@@ -45,35 +47,46 @@ if __name__ == "__main__":
                     if ob.asks[0][0] == order.base: # if order not ate whole price level
                         is_found = False
                         ind = bisect_left(last_ask_states[-1][1], order.base, key=lambda x: x[0])
-                        if ind == len(last_ask_states[-1][1]) or last_ask_states[-1][1][ind][0] != order.base:
-                            is_found = True # to prevent adding - it is between diffs price level
-                        else:
-                            for ts, last_ask in last_ask_states[-2::-1]:
+                        if ind != len(last_ask_states[-1][1]) and last_ask_states[-1][1][ind][0] == order.base:
+                            for j, (ts, last_ask) in enumerate(last_ask_states[-2::-1]):
+                                if order.base in last_pl_removed[-j-1]:
+                                    possible_ts.append((ts+1, order.base, Side.SELL))
+                                    is_found = True
+                                    break
                                 ind = bisect_left(last_ask, order.base, key=lambda x: x[0])
                                 if ind == len(last_ask) or last_ask[ind][0] != order.base:
                                     possible_ts.append((ts+1, order.base, Side.SELL))
                                     is_found = True
                                     break
-                        if not is_found:
-                            possible_ts.append((ts, order.base, Side.SELL))
+                            if not is_found:
+                                possible_ts.append((ts, order.base, Side.SELL))
+                    else:
+                        cur_pl_removed.add(order.base)
                 elif len(ob.bids):
                     if ob.bids[0][0] == order.base: # if order not ate whole price level
                         is_found = False
                         ind = bisect_left(last_bid_states[-1][1], -order.base, key=lambda x: -x[0])
-                        if ind == len(last_bid_states[-1][1]) or last_bid_states[-1][1][ind][0] != order.base:
-                            is_found = True
-                        else:
-                            for ts, last_bid in last_bid_states[-2::-1]:
+                        if ind != len(last_bid_states[-1][1]) and last_bid_states[-1][1][ind][0] == order.base:
+                            for j, (ts, last_bid) in enumerate(last_bid_states[-2::-1]):
+                                if order.base in last_pl_removed[-j-1]:
+                                    possible_ts.append((ts+1, order.base, Side.BUY))
+                                    is_found = True
+                                    break
                                 ind = bisect_left(last_bid, -order.base, key=lambda x: -x[0])
                                 if ind == len(last_bid) or last_bid[ind][0] != order.base:
                                     possible_ts.append((ts+1, order.base, Side.BUY))
                                     is_found = True
                                     break
-                        if not is_found:
-                            possible_ts.append((ts, order.base, Side.BUY))
+                            if not is_found:
+                                possible_ts.append((ts, order.base, Side.BUY))
+                    else:
+                        cur_pl_removed.add(order.base)
             else:
                 ob.set_limit_order([order.base, order.quote, order.side])
-        
+    
+        last_pl_removed.append(cur_pl_removed)
+        if len(last_pl_removed) > MAX_PAST_DIFFS:
+            del last_pl_removed[0]
         ob.apply_historical_update(diff)
     
     possible_ts.sort(key=lambda x: (x[0], x[1], x[2]))

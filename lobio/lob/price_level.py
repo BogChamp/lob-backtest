@@ -213,9 +213,10 @@ class PriceLevelSimple:
                 self.amount[0] -= quote
 
     def place_my_order(self, ratio_after_me: float, order_id: int):
-        quote_after_me = int(ratio_after_me * self.total_amount())
-        self.amount[0] = self.total_amount() - quote_after_me - 1
-        self.amount[1] = quote_after_me + 1
+        total_amount = self.total_amount()
+        quote_after_me = int(ratio_after_me * total_amount)
+        self.amount[0] = max(total_amount - quote_after_me - 1, 0)
+        self.amount[1] = min(quote_after_me + 1, total_amount)
         self.my_order_id = order_id
 
     def queue_dynamic(self, ratio_after_me: float):
