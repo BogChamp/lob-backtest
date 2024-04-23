@@ -7,7 +7,7 @@ def calculate_loss(poses_true_info: list[None|Tuple[int, int]],
                    poses_pred_info: list[None|Tuple[int, int]], 
                    obs_actions: list[list[Tuple[int, int, int]]], 
                    rl_model: GaussianPDFModel,
-                   gamma: float) -> torch.FloatTensor:
+                   gamma: float) -> Tuple[torch.FloatTensor, float]:
     max_len = 0
     all_episod_records = []
     for episod_record in obs_actions:
@@ -20,6 +20,7 @@ def calculate_loss(poses_true_info: list[None|Tuple[int, int]],
     all_log_probs = rl_model.log_probs(all_episod_records)
 
     loss = 0
+    reward = 0
     M = 0
     running_idx = 0
     for i, episod_record in enumerate(obs_actions):
@@ -29,10 +30,12 @@ def calculate_loss(poses_true_info: list[None|Tuple[int, int]],
                 cum_sum = torch.cumsum(coefs, dim=0)
                 reverse_cum_sum = coefs - cum_sum + cum_sum[-1]
                 episod_reward = 2 * (poses_true_info[i] != poses_pred_info[i]) - 1 # -1 for true
+                reward += poses_true_info[i] == poses_pred_info[i]
                 loss += episod_reward * (reverse_cum_sum * all_log_probs[running_idx:running_idx+len(episod_record)]).sum() / len(episod_record)
                 M += 1
         running_idx += len(episod_record)
 
     loss /= M
+    reward /= M
 
-    return loss
+    return loss, reward

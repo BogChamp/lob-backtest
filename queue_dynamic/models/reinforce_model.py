@@ -96,7 +96,7 @@ class GaussianPDFModel(nn.Module):
             unscale_multiplier,
         ) = self.get_unscale_coefs_from_minus_one_one_to_action_bounds()
 
-        return x * unscale_multiplier #+ unscale_bias
+        return x * unscale_multiplier + unscale_bias
 
     def scale_from_action_bounds_to_minus_one_one(
         self, y: torch.FloatTensor

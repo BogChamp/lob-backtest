@@ -203,13 +203,16 @@ class PriceLevelSimple:
     def change_historical_liquidity(self, quote: int):
         if quote > 0:
             self.add_liquidity(quote)
-        elif quote < 0: # from start to end
+        elif quote < 0: # from end to start
             quote = abs(quote)
-            if quote <= self.amount[1] - 1:
-                self.amount[1] -= quote
+            if self.my_order_id:
+                if quote <= self.amount[1] - 1:
+                    self.amount[1] -= quote
+                else:
+                    quote -= self.amount[1] - 1
+                    self.amount[1] = 1
+                    self.amount[0] -= quote
             else:
-                quote -= self.amount[1] - 1
-                self.amount[1] = 1
                 self.amount[0] -= quote
 
     def place_my_order(self, ratio_after_me: float, order_id: int):
