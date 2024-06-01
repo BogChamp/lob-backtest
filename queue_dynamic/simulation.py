@@ -1,27 +1,28 @@
 import numpy as np
 from typing import Tuple, Sequence
 from bisect import bisect_left
-import torch.nn as nn
 import torch
 
-from lobio.lob.limit_order import Side, OrderType, Order
+from lobio.lob.limit_order import Side, OrderType, Order, PRICE_TICK
 from lobio.lob.price_level import PriceLevelSimple
-from lobio.utils.utils import get_initial_order_book_simple2
-from queue_dynamic.models.reinforce_model import GaussianPDFModel
+from lobio.lob.order_book import OrderBookSimple2
+from lobio.utils.utils import get_initial_order_book
+from queue_dynamic.models.models import GaussianPDFModel
 
+# None - not eaten, -1 - replaced, (int, int) - eaten
 def run_true_simulation(init_lob: np.ndarray[int], 
                         diffs_grouped: Sequence[Tuple[int, Sequence[Tuple[int, int]], Sequence[Tuple[int, int]]]], 
                         orders_per_diff: Sequence[Sequence[Tuple[int, Order]]],
                         samples: np.array,
                         place_ratios: np.array,
                         rng: np.random.Generator) -> list[int|None|Tuple[int, int]]:
-    poses_true_info = [None] * len(samples)
+    poses_true_info = [None] * len(samples) # how our orders removed truly
     my_current_poses: dict[int, PriceLevelSimple] = {}
     sample_running_ind = 0
-    ob = get_initial_order_book_simple2(init_lob)
+    ob: OrderBookSimple2 = get_initial_order_book(init_lob, OrderBookSimple2)
 
     for i, diff in enumerate(diffs_grouped):
-        while sample_running_ind < len(samples) and samples[sample_running_ind][0] == i:
+        while sample_running_ind < len(samples) and samples[sample_running_ind][0] == i: # check if we need place an order
             if samples[sample_running_ind][2] == Side.BUY:
                 ind = bisect_left(ob.bids, -samples[sample_running_ind][1], key=lambda x: -x.base)
                 if ob.bids[ind].my_order_id != None:
@@ -51,7 +52,8 @@ def run_true_simulation(init_lob: np.ndarray[int],
             else:
                 ob.set_limit_order([order.base, order.quote, order.side])
 
-        ratios = np.zeros(len(my_current_poses))#ratios = rng.beta(1.5, 12, size=len(my_current_poses)) # HERE UNCERTAINTY
+        #ratios = np.zeros(len(my_current_poses))#
+        ratios = np.zeros(len(my_current_poses)) #rng.beta(0.8, 12, size=len(my_current_poses)) # HERE UNCERTAINTY
         for j, p_l in enumerate(my_current_poses.values()):
             p_l.queue_dynamic(ratios[j])
 
@@ -67,13 +69,15 @@ def run_pred_simulation(init_lob: np.ndarray[int],
                         samples: np.array, 
                         place_ratios: np.array, 
                         rl_model: GaussianPDFModel) -> Tuple[list[int|None|Tuple[int, int]], list[list[Tuple[int, int, int]]]]:
-    poses_pred_info = [None] * len(samples)
+    poses_pred_info = [None] * len(samples) # how our orders removed predicted
     my_current_poses_info: dict[int, Tuple[PriceLevelSimple, int, int, int]] = {} # order_id - price level, number of diffs lived,amount changed, old_amount
-    obs_actions = [[] for _ in range(len(samples))]
     sample_running_ind = 0
-    ob = get_initial_order_book_simple2(init_lob)
+    ob: OrderBookSimple2 = get_initial_order_book(init_lob, OrderBookSimple2)
 
+    obs_actions = [[] for _ in range(len(samples))]
     for i, diff in enumerate(diffs_grouped):
+        mid_price = (ob.bids[0].base + ob.asks[0].base) * 10**(-PRICE_TICK) / 2
+
         while sample_running_ind < len(samples) and samples[sample_running_ind][0] == i:
             if samples[sample_running_ind][2] == Side.BUY:
                 ind = bisect_left(ob.bids, -samples[sample_running_ind][1], key=lambda x: -x.base) # INDEXES FOUND IN PREV STEP(WHILE GROUND TRUE GENERATED)
@@ -108,14 +112,14 @@ def run_pred_simulation(init_lob: np.ndarray[int],
 
         observations = []
         for info in my_current_poses_info.values():
-            observations.append((info[1], info[2]))
+            observations.append((info[1], info[2], mid_price))
 
         if len(observations):
             observations_tensor = torch.FloatTensor(observations)
             ratios = rl_model.sample(observations_tensor)
             for j, (order_id, info) in enumerate(my_current_poses_info.items()):
                 info[0].queue_dynamic(ratios[j])
-                obs_actions[order_id].append((info[1], info[2], ratios[j]))
+                obs_actions[order_id].append((info[1], info[2], mid_price, ratios[j]))
 
         my_orders_removed = ob.apply_historical_update(diff)
         for my_removed in my_orders_removed:

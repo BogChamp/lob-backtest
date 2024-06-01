@@ -1,7 +1,7 @@
 import numpy as np
 from lobio.lob.order_book import OrderBook
 from lobio.lob.limit_order import Order, OrderType, PRICE_TICK, TraderId, Side
-from lobio.model.base_model import Model
+from lobio.strategies.base_model import Model
 from typing import Tuple, Optional
 
 

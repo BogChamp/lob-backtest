@@ -1,4 +1,3 @@
-import polars as pl
 import numpy as np
 from loguru import logger
 

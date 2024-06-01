@@ -1,5 +1,5 @@
-from .limit_order import Order, AMOUNT_TICK, Side, TraderId, OrderType
-from typing import Tuple, Sequence, Optional
+from .limit_order import Order, TraderId, OrderType
+from typing import Tuple
 
 class PriceLevel:
     """Class for FIFO logic handling on price level."""
@@ -49,7 +49,7 @@ class PriceLevel:
         else:
             self.traders_order.append(limit_order)
 
-    def execute_market_order(self, quote: int) -> Tuple[int, int]:#Tuple[int, dict[TraderId, int]]: # NO CHECK FOR SELF EXEC
+    def execute_market_order(self, quote: int) -> Tuple[int, int]: #Tuple[int, dict[TraderId, int]]: # NO CHECK FOR SELF EXEC
         """Remove part of price level due to exchange.
 
         Args:
@@ -152,7 +152,7 @@ class PriceLevel:
 
 
 class PriceLevelSimple:
-    def __init__(self, base:int, quote: int) -> None:
+    def __init__(self, base: int, quote: int) -> None:
         self.amount = [quote, 0]
         self.base = base
         self.my_order_id = None
@@ -174,7 +174,7 @@ class PriceLevelSimple:
             self.amount[0] -= quote
             quote = 0
             me_executed = None
-        else:
+        else: # here means we executed
             quote -= self.amount[0]
             if quote <= self.amount[1]:
                 self.amount[1] -= quote
@@ -199,7 +199,7 @@ class PriceLevelSimple:
                 quote -= self.amount[0]
                 self.amount[0] = 0
                 self.amount[1] -= quote
-    
+
     def change_historical_liquidity(self, quote: int):
         if quote > 0:
             self.add_liquidity(quote)

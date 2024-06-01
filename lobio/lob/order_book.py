@@ -1,5 +1,4 @@
 from typing import Any, Sequence, Tuple, Self
-from sortedcontainers import SortedDict, SortedList, SortedKeyList
 from bisect import bisect_left
 
 from .limit_order import Order, PRICE_TICK, AMOUNT_TICK, Side, TraderId, OrderType

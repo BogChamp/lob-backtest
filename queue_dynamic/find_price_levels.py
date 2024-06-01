@@ -4,8 +4,9 @@ from copy import deepcopy
 import numpy as np
 from loguru import logger
 
-from lobio.utils.utils import get_initial_order_book_trunc, group_diffs, group_orders
+from lobio.utils.utils import get_initial_order_book, group_diffs, group_orders
 from lobio.lob.limit_order import Side, OrderType
+from lobio.lob.order_book import OrderBookTrunc
 
 if __name__ == "__main__":
     init_lob_prepared_file = "./data/init_lob_prepared.npy"
@@ -24,7 +25,7 @@ if __name__ == "__main__":
     orders_per_diff = group_orders(orders, len(diffs_grouped))
 
     logger.info('Find appropriate price levels!')
-    ob = get_initial_order_book_trunc(init_lob)
+    ob: OrderBookTrunc = get_initial_order_book(init_lob, OrderBookTrunc)
     MAX_PAST_DIFFS = 30
     last_bid_states = []
     last_ask_states = []
@@ -50,7 +51,7 @@ if __name__ == "__main__":
                 if order.side == Side.BUY and len(ob.asks):
                     if ob.asks[0][0] == order.base: # if order not ate whole price level
                         is_found = False
-                        ind = bisect_left(last_ask_states[-1][1], order.base, key=lambda x: x[0])
+                        ind = bisect_left(last_ask_states[-1][1], order.base, key=lambda x: x[0]) # to check if amount was in prev state
                         if ind != len(last_ask_states[-1][1]) and last_ask_states[-1][1][ind][0] == order.base:
                             for j, (ts, last_ask) in enumerate(last_ask_states[-2::-1]):
                                 if order.base in last_pl_removed[-j-1]:
@@ -75,7 +76,7 @@ if __name__ == "__main__":
                 elif len(ob.bids):
                     if ob.bids[0][0] == order.base: # if order not ate whole price level
                         is_found = False
-                        ind = bisect_left(last_bid_states[-1][1], -order.base, key=lambda x: -x[0])
+                        ind = bisect_left(last_bid_states[-1][1], -order.base, key=lambda x: -x[0]) # to check if amount was in prev state
                         if ind != len(last_bid_states[-1][1]) and last_bid_states[-1][1][ind][0] == order.base:
                             for j, (ts, last_bid) in enumerate(last_bid_states[-2::-1]):
                                 if order.base in last_pl_removed[-j-1]:

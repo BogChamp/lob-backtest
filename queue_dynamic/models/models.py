@@ -73,11 +73,6 @@ class GaussianPDFModel(nn.Module):
             ),
         )
 
-        # self.perceptron = nn.Sequential(nn.Linear(self.dim_observation, self.dim_hidden), nn.LeakyReLU(self.leakyrelu_coef),
-        #                                 nn.Linear(self.dim_hidden, self.dim_hidden), nn.LeakyReLU(self.leakyrelu_coef),
-        #                                 nn.Linear(self.dim_hidden, self.dim_action))
-        #self.perceptron = nn.Sequential(nn.Linear(self.dim_observation, self.dim_action))
-
     def get_unscale_coefs_from_minus_one_one_to_action_bounds(
         self,
     ) -> Tuple[torch.FloatTensor, torch.FloatTensor]:
@@ -137,12 +132,24 @@ class GaussianPDFModel(nn.Module):
         action_bounds = self.get_parameter("action_bounds")
         scale_tril_matrix = self.get_parameter("scale_tril_matrix")
         scaled_mean = self.get_means(observation)
-        #print(scaled_mean)
         sampled_scaled_action = MultivariateNormal(scaled_mean, scale_tril=scale_tril_matrix).sample()
-        #print(sampled_scaled_action)
         sampled_action = self.unscale_from_minus_one_one_to_action_bounds(sampled_scaled_action)
-        #print(sampled_action)
 
         return torch.clamp(
             sampled_action, action_bounds[:, 0], action_bounds[:, 1]
         )
+
+
+class Critic(nn.Module):
+    def __init__(
+        self,
+        model: nn.Module
+    ):
+        super().__init__()
+        self.model = model
+        self.output_layer = nn.Tanh()
+
+    def forward(self, x: torch.FloatTensor) -> torch.FloatTensor:
+        x = self.model(x)
+        x = self.output_layer(x)
+        return x

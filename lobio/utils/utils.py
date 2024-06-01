@@ -5,7 +5,7 @@ from tqdm import tqdm
 from bisect import bisect_left
 
 from lobio.lob.limit_order import Order, AMOUNT_TICK, EventType, OrderType, Side, TraderId
-from lobio.lob.order_book import OrderBook, OrderBookSimple, OrderBookTrunc, TOP_N, OrderBookSimple2
+from lobio.lob.order_book import OrderBook, OrderBookSimple, TOP_N, OrderBookSimple2
 
 def calculate_ticker_changes(tickers_raw: dict) -> Sequence[Tuple[float, float, int]]:
     tickers_chg = []
@@ -120,55 +120,15 @@ def group_diffs(diffs_prepared: np.ndarray[int]) -> Sequence[Tuple[int, Sequence
     diffs_grouped = []
     for diff in tqdm(diffs_grouped_T.iter_rows(), total=len(diffs_grouped_T)):
         diffs_grouped.append(get_grouped_diff(diff))
-    # prev_ts = diffs_prepared[0][0]
-    # diffs_grouped = []
-    # cur_bids = []
-    # cur_asks = []
-    # for diff in tqdm(diffs_prepared):
-    #     if diff[0] != prev_ts:
-    #         diffs_grouped.append((prev_ts, cur_bids, cur_asks))
-    #         cur_bids = []
-    #         cur_asks = []
-    #         prev_ts = diff[0]
-
-    #     if diff[3] == Side.BUY:
-    #         cur_bids.append((diff[1], diff[2]))
-    #     else:
-    #         cur_asks.append((diff[1], diff[2]))
-    #diffs_grouped.append((prev_ts, cur_bids, cur_asks))
     
     return diffs_grouped
 
-def get_initial_order_book(init_lob_data: np.ndarray[int]) -> OrderBook:
+def get_initial_order_book(init_lob_data: np.ndarray[int], lob_class: OrderBook|OrderBookSimple|OrderBookSimple2):
     ts, init_lob = init_lob_data[-1][0], init_lob_data[:-1]
     bids = init_lob[:, :2]
     asks = init_lob[:, 2:]
     init_lob_dict = {"lastUpdateId": ts, "bids": bids, "asks": asks}
-    order_book = OrderBook.create_lob_init(init_lob_dict)
-    return order_book
-
-def get_initial_order_book_simple(init_lob_data: np.ndarray[int]) -> OrderBookSimple:
-    ts, init_lob = init_lob_data[-1][0], init_lob_data[:-1]
-    bids = init_lob[:, :2]
-    asks = init_lob[:, 2:]
-    init_lob_dict = {"lastUpdateId": ts, "bids": bids, "asks": asks}
-    order_book = OrderBookSimple.create_lob_init(init_lob_dict)
-    return order_book
-
-def get_initial_order_book_simple2(init_lob_data: np.ndarray[int]) -> OrderBookSimple2:
-    ts, init_lob = init_lob_data[-1][0], init_lob_data[:-1]
-    bids = init_lob[:, :2]
-    asks = init_lob[:, 2:]
-    init_lob_dict = {"lastUpdateId": ts, "bids": bids, "asks": asks}
-    order_book = OrderBookSimple2.create_lob_init(init_lob_dict)
-    return order_book
-
-def get_initial_order_book_trunc(init_lob_data: np.ndarray[int]) -> OrderBookTrunc:
-    ts, init_lob = init_lob_data[-1][0], init_lob_data[:-1]
-    bids = init_lob[:, :2]
-    asks = init_lob[:, 2:]
-    init_lob_dict = {"lastUpdateId": ts, "bids": bids, "asks": asks}
-    order_book = OrderBookTrunc.create_lob_init(init_lob_dict)
+    order_book = lob_class.create_lob_init(init_lob_dict)
     return order_book
 
 def check_if_diffs_sorted(diffs_grouped: Sequence[Tuple[int, Sequence[Tuple[int, int]], Sequence[Tuple[int, int]]]]):
@@ -273,8 +233,8 @@ def find_unseen_dynamic_of_lob(init_lob: np.ndarray[int],
                                trades_per_diff: Sequence[Sequence[Tuple[int, int, int, int]]],
                                diffs_grouped: Sequence[Tuple[int, Sequence[Tuple[int, int]], Sequence[Tuple[int, int]]]]) -> \
                                 Tuple[list[Tuple[int, int, int, int, int, int, int]], list[Tuple[int, int, int, int, int, int, int]]]:
-    ob = get_initial_order_book_simple(init_lob)
-    #ob2 = get_initial_order_book_simple(init_lob)
+    ob = get_initial_order_book(init_lob, OrderBookSimple)
+    #ob2 = get_initial_order_book(init_lob, OrderBookSimple)
     additional_data = [] # transaction time, order of event, diff number before which happened, p, q change, side, event type
     trades_prepared = []
 
@@ -453,7 +413,7 @@ def update_diffs(unseen_diffs: list[Tuple[int, int, int, int]], init_lob: np.nda
                     list[Tuple[int, list[Tuple[int, int]], list[Tuple[int, int]]]]:
     final_diffs = [] # part of functionality can be passed to obsimple class
     unseen_diff_ind = 0
-    ob = get_initial_order_book_simple(init_lob)
+    ob = get_initial_order_book(init_lob, OrderBookSimple)
     for i, diff in enumerate(tqdm(diffs_grouped)):
         new_diff = ob.track_diff(diff)
 
@@ -591,7 +551,7 @@ def collect_new_ask_diff(top_asks_before: Sequence[Tuple[int, int]],
 def cut_diffs(init_lob: np.ndarray[int],
               new_diffs: Sequence[Tuple[int, list[Tuple[int, int]], list[Tuple[int, int]]]],
               orders_per_diff: Sequence[Sequence[Tuple[int, Order]]]) -> Sequence[Tuple[int, list[Tuple[int, int]], list[Tuple[int, int]]]]:
-    ob = get_initial_order_book_simple(init_lob)
+    ob = get_initial_order_book(init_lob, OrderBookSimple)
     diffs_cut = []
     for i, diff in enumerate(tqdm(new_diffs)):
         top_bids_before = [(ob.bids[i][0], ob.bids[i][1]) for i in range(TOP_N)]
@@ -617,7 +577,7 @@ def cut_diffs(init_lob: np.ndarray[int],
 
 def prepare_init_lob(init_lob: np.ndarray[int],
                      initial_state_update: Sequence[Tuple[int, int, int]]) -> np.ndarray[int]:
-    ob = get_initial_order_book_simple(init_lob)
+    ob = get_initial_order_book(init_lob, OrderBookSimple)
     for diff_change in tqdm(initial_state_update):
         if diff_change[2] == Side.BUY:
             index = bisect_left(ob.bids,  -diff_change[0], key=lambda x: -x[0])

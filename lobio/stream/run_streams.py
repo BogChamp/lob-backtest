@@ -10,7 +10,7 @@ DIFF_SOCKET_URI = "wss://fstream.binance.com/ws/ethusdt@depth@0ms"
 #TRADES_SOCKET_URI = "wss://stream.binance.com:9443/ws/ethusdt@trade"
 AGGTRADES_SOCKET_URI = "wss://fstream.binance.com/ws/ethusdt@aggTrade"
 #BOOKTICKER_SOCKET_URI = "wss://stream.binance.com:9443/ws/ethusdt@bookTicker"
-LOB_API_URI = "https://fapi.binance.com/fapi/v1/depth?symbol=ETHUSDT&limit=1000"
+LOB_API_URI = "https://fapi.binance.com/fapi/v1/depth?symbol=ETHUSDT&limit=5000"
 #url = "wss://stream.binance.com:9443/stream?streams=ethusdt@depth@100ms/ethusdt@trade"
 
 async def socket(link, seconds=1200):

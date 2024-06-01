@@ -8,8 +8,6 @@ class PnL_Counter:
         self.q0 = q0
         self.quote_history = [q0]
         self.price_history = []
-        # self.asset_purchased = 0.0
-        # self.money_spent = 0.0
 
     def collect_statistic(self, new_q: int, new_price: float):
         self.quote_history.append(new_q)
@@ -24,16 +22,3 @@ class PnL_Counter:
     def reset(self):
         self.quote_history = [self.q0]
         self.price_history = []
-    
-
-    # def update(self, asset_purchased, money_spent):
-    #     self.asset_purchased += asset_purchased
-    #     self.money_spent += money_spent
-
-    # def unrealized_pnl(self, cur_amount, ask_price):
-    #     if self.asset_purchased > 0:
-    #         self.pnl += cur_amount * (ask_price - self.money_spent / self.asset_purchased)
-
-    # def realized_pnl(self, amount_sold, price):
-    #     if self.asset_purchased > 0:
-    #         self.pnl += price - amount_sold * (self.money_spent / self.asset_purchased)
