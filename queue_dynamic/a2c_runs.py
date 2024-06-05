@@ -50,6 +50,7 @@ N_episode = 500
 N_td = 1
 N_critic_epoch = 30
 #epsilon = 0.2
+#N_ppo_epoch = 30
 n_exp = 10
 
 params = {'dim_obs': dim_observation, 
@@ -94,7 +95,6 @@ for exp_num in range(n_exp):
     rl_critic = Critic(ModelPerceptron(dim_observation, 1, dim_hidden=dim_hidden_critic, n_hidden_layers=n_hidden_layers_critic))
 
     optimizer_agent = torch.optim.SGD(rl_agent.parameters(), lr=lr)
-    optimizer_critic = torch.optim.SGD(rl_critic.parameters(), lr=lr_critic)
 
     running_loss = []
     running_reward = []
@@ -129,6 +129,7 @@ for exp_num in range(n_exp):
 
         all_episod_records = torch.concat(all_episod_records, dim=0)
         # critic train
+        optimizer_critic = torch.optim.SGD(rl_critic.parameters(), lr=lr_critic)
         for _ in range(N_critic_epoch):
             #values = rl_critic(all_episod_records[:, :-1]) # last value - action
             running_idx = 0
@@ -152,12 +153,16 @@ for exp_num in range(n_exp):
         loss.backward()
         optimizer_agent.step()
         # # PPO train
-        # optimizer_agent.zero_grad()
-        #loss = ppo_objective(all_episod_records, poses_true_info, poses_pred_info,
-        #                       obs_actions, all_costs_per_step, rl_agent, rl_critic, gamma, epsilon)
-        # loss.backward()
-        # optimizer_agent.step()
-
+        # loss = 0
+        # optimizer_agent = torch.optim.SGD(rl_agent.parameters(), lr=lr)
+        # for _ in tqdm(range(N_ppo_epoch)):
+        #     optimizer_agent.zero_grad()
+        #     loss_epoch = ppo_objective(all_episod_records, poses_true_info, poses_pred_info,
+        #                         obs_actions, all_costs_per_step, rl_agent, rl_critic, gamma, epsilon)
+        #     loss_epoch.backward()
+        #     optimizer_agent.step()
+        #     loss += loss_epoch.detach()
+        # loss /= N_ppo_epoch
         running_loss.append(loss.item())
         running_reward.append(reward)
     running_losses.append(running_loss)
