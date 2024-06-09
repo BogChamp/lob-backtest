@@ -42,7 +42,7 @@ pip install -e .
 │   └── simulation.py
 ├── setup.py
 ```
-## How to load data
+## How to prepare data
 
 1) To download data from the exchange run 
 ```
@@ -54,6 +54,12 @@ python3 lobio/stream/run_streams.py
 python3 lobio/utils/check_compress_data.py
 python3 lobio/utils/data_preparation.py
 ```
+
+3) To create data for RL agent training run 
+```
+python3 queue_dynamic/find_price_levels.py
+```
+
 ## Repo description
 
 * [`lobio`](lobio) — folder contains code for data downloading, strategy, limit order book structure and accounting implementation. 
