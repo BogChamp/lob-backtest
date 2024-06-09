@@ -29,12 +29,8 @@ pip install -e .
 ├── notebooks
 │   ├── ac.ipynb
 │   ├── backtest.ipynb
-│   ├── backtest_queue.ipynb
 │   ├── data_prep.ipynb
-│   ├── data_prep_for_features.ipynb
 │   ├── exp_pick.ipynb
-│   ├── features.csv
-│   ├── features.ipynb
 │   └── research.ipynb
 ├── queue_dynamic
 │   ├── a2c_runs.py
