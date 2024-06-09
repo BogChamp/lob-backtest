@@ -2,7 +2,7 @@ from typing import Any, Sequence, Tuple, Self
 from bisect import bisect_left
 
 from .limit_order import Order, PRICE_TICK, AMOUNT_TICK, Side, TraderId, OrderType
-from .price_level import PriceLevel, PriceLevelSimple
+from .price_level import PriceLevel, PriceLevelSimple, PriceLevelSimple2
 
 PRETTY_INDENT_OB: int = 36
 TOP_N: int = 20
@@ -687,3 +687,191 @@ class OrderBookSimple2:
             del self.bids[:i]
         
         return my_orders_eaten
+
+
+class OrderBookSimple3:
+    def __init__(self, 
+                 bids: Sequence[PriceLevelSimple2] = None, 
+                 asks: Sequence[PriceLevelSimple2] = None,
+                 top_n: int = TOP_N):
+        if bids is None:
+            bids = []
+
+        if asks is None:
+            asks = []
+
+        self.bids = sorted(bids, reverse=True, key=lambda x: x.base)
+        self.asks = sorted(asks, key=lambda x: x.base)
+        self.top_n = top_n
+        del self.bids[self.top_n:]
+        del self.asks[self.top_n:]
+    
+    @classmethod
+    def create_lob_init(cls, lob_state: dict) -> Self:
+        bids_raw = lob_state["bids"]
+        asks_raw = lob_state["asks"]
+
+        bids = []
+        asks = []
+        for bid_raw in bids_raw:
+            bids.append(PriceLevelSimple2(bid_raw[0], bid_raw[1]))
+
+        for ask_raw in asks_raw:
+            asks.append(PriceLevelSimple2(ask_raw[0], ask_raw[1]))
+
+        return cls(bids, asks)
+
+    def apply_historical_update(self, diff: Tuple[int, Sequence[Tuple[int, int]], Sequence[Tuple[int, int]]]) -> list[int]:
+        bids_update = diff[1]
+        asks_update = diff[2]
+
+        my_orders_removed1 = self.update_bids(bids_update)
+        my_orders_removed2 = self.update_asks(asks_update)
+
+        return my_orders_removed1 + my_orders_removed2
+
+    def update_bids(self, updates: Sequence[Tuple[int, int]]) -> list[int]:
+        my_orders_removed = []
+
+        for update in updates:
+            price = update[0]
+            amount = update[1]
+            index = bisect_left(
+                self.bids, -price, key=lambda x: -x.base
+            )
+            if index == len(self.bids):
+                if amount > 0:
+                    self.bids.append(PriceLevelSimple2(price, amount))
+            elif self.bids[index].base == price:
+                if amount == 0:
+                    if self.bids[index].my_order_id != None:
+                        my_orders_removed.append(self.bids[index].my_order_id)
+                    del self.bids[index]
+                else:
+                    amount_change = amount - self.bids[index].total_amount()
+                    self.bids[index].change_historical_liquidity(amount_change) # change will never clear price level
+            else:
+                if amount > 0:
+                    self.bids.insert(index, PriceLevelSimple2(price, amount))
+
+        for bid in self.bids[self.top_n:]:
+            if bid.my_order_id != None:
+                my_orders_removed.append(bid.my_order_id)
+        del self.bids[self.top_n:]
+
+        return my_orders_removed
+
+    def update_asks(self, updates: Sequence[Tuple[int, int]]) -> list[int]:
+        my_orders_removed = []
+
+        for update in updates:
+            price = update[0]
+            amount = update[1]
+            index = bisect_left(
+                self.asks, price, key=lambda x: x.base
+            )
+            if index == len(self.asks):
+                if amount > 0:
+                    self.asks.append(PriceLevelSimple2(price, amount))
+            elif self.asks[index].base == price:
+                if amount == 0:
+                    if self.asks[index].my_order_id != None:
+                        my_orders_removed.append(self.asks[index].my_order_id)
+                    del self.asks[index]
+                else:
+                    amount_change = amount - self.asks[index].total_amount()
+                    self.asks[index].change_historical_liquidity(amount_change)
+            else:
+                if amount > 0:
+                    self.asks.insert(index, PriceLevelSimple2(price, amount))
+
+        for ask in self.asks[self.top_n:]:
+            if ask.my_order_id != None:
+                my_orders_removed.append(ask.my_order_id)
+        del self.asks[self.top_n:]
+
+        return my_orders_removed
+    
+    def set_limit_order(self, limit_order: Tuple[int, int, int]):
+        if limit_order[2] == Side.BUY:
+            self.set_bid_limit_order(limit_order)
+        else:
+            self.set_ask_limit_order(limit_order)
+    
+    def set_bid_limit_order(self, limit_order: Tuple[int, int, int]):
+        index = bisect_left(self.bids, -limit_order[0], key=lambda x: -x.base)
+        if index == len(self.bids):
+            self.bids.append(PriceLevelSimple2(limit_order[0], limit_order[1]))
+        elif self.bids[index].base == limit_order[0]:
+            self.bids[index].add_liquidity(limit_order[1])
+        else:
+            self.bids.insert(index, PriceLevelSimple2(limit_order[0], limit_order[1]))
+    
+    def set_ask_limit_order(self, limit_order: Tuple[int, int, int]):
+        index = bisect_left(self.asks, limit_order[0], key=lambda x: x.base)
+        if index == len(self.asks):
+            self.asks.append(PriceLevelSimple2(limit_order[0], limit_order[1]))
+        elif self.asks[index].base == limit_order[0]:
+            self.asks[index].add_liquidity(limit_order[1])
+        else:
+            self.asks.insert(index, PriceLevelSimple2(limit_order[0], limit_order[1]))
+
+    def set_market_order(self, market_order: Tuple[int, int]) -> Tuple[list[int], int, int]:
+        if market_order[1] == Side.BUY:
+            my_orders_eaten, my_amount, my_money = self.set_buy_market_order(market_order)
+        else:
+            my_orders_eaten, my_amount, my_money = self.set_sell_market_order(market_order)
+        
+        return my_orders_eaten, my_amount, my_money
+
+    def set_buy_market_order(self, market_order: Tuple[int, int]) -> Tuple[list[int], int, int]:
+        my_orders_eaten = []
+        my_amount_sold = 0
+        my_money_got = 0
+        i = 0
+        while i < len(self.asks) and self.asks[i].total_amount() <= market_order[0]:
+            market_order[0] -= self.asks[i].total_amount() # self.asks[i].execute_market_order(market_order[0])
+            if self.asks[i].my_order_id != None: # if me executed
+                my_orders_eaten.append(self.asks[i].my_order_id)
+                my_amount_sold += self.asks[i].amount[1]
+                my_money_got += self.asks[i].amount[1] * self.asks[i].base
+            i += 1
+
+        if i == len(self.asks):
+            self.asks = []
+        else:
+            _, my_id, my_amount = self.asks[i].execute_market_order(market_order[0])
+            if my_id != None:
+                if self.asks[i].my_order_id == None:
+                    my_orders_eaten.append(my_id)
+                my_amount_sold += my_amount
+                my_money_got += my_amount * self.asks[i].base
+            del self.asks[:i]
+        
+        return my_orders_eaten, my_amount_sold, my_money_got
+    
+    def set_sell_market_order(self, market_order: Tuple[int, int]) -> Tuple[list[int], int, int]:
+        my_orders_eaten = []
+        my_amount_bought = 0
+        my_money_lost = 0
+        i = 0
+        while i < len(self.bids) and self.bids[i].total_amount() <= market_order[0]:
+            market_order[0] -= self.bids[i].total_amount() # self.bids[i].execute_market_order(market_order[0])
+            if self.bids[i].my_order_id != None: # if me executed
+                my_orders_eaten.append(self.bids[i].my_order_id)
+                my_amount_bought += self.bids[i].amount[1]
+                my_money_lost += self.bids[i].amount[1] * self.bids[i].base
+            i += 1
+
+        if i == len(self.bids):
+            self.bids = []
+        else:
+            _, my_id, my_amount = self.bids[i].execute_market_order(market_order[0])
+            if my_id != None:
+                if self.bids[i].my_order_id == None:
+                    my_orders_eaten.append(my_id)
+                my_amount_bought += my_amount
+                my_money_lost += my_amount * self.bids[i].base
+            del self.bids[:i]
+        
+        return my_orders_eaten, my_amount_bought, my_money_lost

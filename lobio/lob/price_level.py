@@ -1,5 +1,6 @@
 from .limit_order import Order, TraderId, OrderType
 from typing import Tuple
+from math import ceil
 
 class PriceLevel:
     """Class for FIFO logic handling on price level."""
@@ -223,6 +224,105 @@ class PriceLevelSimple:
         self.my_order_id = order_id
 
     def queue_dynamic(self, ratio_after_me: float):
-        quote_after_me = int(ratio_after_me * self.amount[0])
+        quote_after_me = int(ceil(ratio_after_me * self.amount[0] - 0.01))
         self.amount[0] -= quote_after_me
         self.amount[1] += quote_after_me
+
+
+MY_SIZE = 10
+class PriceLevelSimple2:
+    def __init__(self, base: int, quote: int) -> None:
+        self.amount = [quote, 0, 0]
+        self.base = base
+        self.my_order_id = None
+    
+    def __repr__(self) -> str:
+        return f'PriceLevel{self.base, self.amount}'
+
+    def add_liquidity(self, quote: int):
+        if self.amount[1] != 0: # if we are in price level
+            self.amount[2] += quote
+        else:
+            self.amount[0] += quote
+    
+    def total_amount(self) -> int:
+        return self.amount[0] + self.amount[1] + self.amount[2]
+    
+    def execute_market_order(self, quote: int) -> Tuple[int, int|None, int]: # always keep in ind 1 amount with us. After we executed, move liquidity to ind 0.
+        if quote <= self.amount[0]:
+            self.amount[0] -= quote
+            quote = 0
+            me_executed = None
+            my_size_executed = 0
+        else: # here means we executed
+            quote -= self.amount[0]
+            me_executed = self.my_order_id
+            if quote <= self.amount[1]:
+                self.amount[1] -= quote
+                my_size_executed = quote
+                quote = 0
+                if self.amount[1] == 0:
+                    self.amount = [self.amount[2], 0, 0]
+                    self.my_order_id = None
+            else:
+                my_size_executed = self.amount[1]
+                self.my_order_id = None
+                quote -= self.amount[1]
+                if quote <= self.amount[2]:
+                    self.amount[2] -= quote
+                    quote = 0
+                    self.amount = [self.amount[2], 0, 0]
+                else:
+                    quote -= self.amount[2]
+                    self.amount = [0, 0, 0]
+
+        return quote, me_executed, my_size_executed
+
+    def change_historical_liquidity_opt(self, quote: int):
+        if quote > 0:
+            self.add_liquidity(quote)
+        elif quote < 0: # from start to end
+            quote = abs(quote)
+            if quote <= self.amount[0]:
+                self.amount[0] -= quote
+            else:
+                quote -= self.amount[0]
+                self.amount[0] = 0
+                if quote <= self.amount[2]:
+                    self.amount[2] -= quote
+                else:
+                    quote -= self.amount[2]
+                    self.amount[2] = 0
+                    self.amount[1] -= quote
+
+    def change_historical_liquidity(self, quote: int):
+        if quote > 0:
+            self.add_liquidity(quote)
+        elif quote < 0: # from end to start
+            quote = abs(quote)
+            if quote <= self.amount[2]:
+                self.amount[2] -= quote
+            else:
+                quote -= self.amount[2]
+                self.amount[2] = 0
+                if quote <= self.amount[0]:
+                    self.amount[0] -= quote
+                else:
+                    quote -= self.amount[0]
+                    self.amount[0] = 0
+                    self.amount[1] -=quote
+
+    def place_my_order(self, ratio_after_me: float, order_id: int):
+        if self.my_order_id == None:
+            total_amount = self.total_amount()
+            quote_after_me = int(ratio_after_me * total_amount)
+            self.amount[0] = max(total_amount - quote_after_me - MY_SIZE, 0)
+            self.amount[1] = min(MY_SIZE, total_amount)
+            self.amount[2] = max(total_amount - self.amount[0] - self.amount[1], 0) # mb without max
+            self.my_order_id = order_id
+
+    def queue_dynamic(self, ratio_after_me: float):
+        quote_after_me = int(ceil(ratio_after_me * self.amount[0] - 0.01))
+        self.amount[0] -= quote_after_me
+        self.amount[2] += quote_after_me
+
