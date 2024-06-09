@@ -8,6 +8,7 @@ pip install -e .
 
 ## Structure of this repo
 
+```bash
 ├── lobio
 │   ├── accounting
 │   │   └── pnl_counter.py
@@ -44,7 +45,7 @@ pip install -e .
 │   ├── reinforce_runs.py
 │   └── simulation.py
 ├── setup.py
-
+```
 ## How to load data
 
 1) To download data from the exchange run 
