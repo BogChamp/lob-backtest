@@ -23,7 +23,7 @@ setup(
     install_requires=[
         "numpy==1.26.1",
         "pandas==2.1.1",
-        "tqdm==4.66.1",
+        "tqdm==4.66.3",
         "matplotlib==3.8.0",
         "websockets==11.0.3",
     ],
